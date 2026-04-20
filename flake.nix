@@ -61,6 +61,7 @@
                 # BUILD TOOLS
                 gnumake
                 clang-tools
+                mandoc
               ];
           };
         };
