@@ -355,6 +355,53 @@ gethex(int c, unsigned char **value_r, int *len_r, gnc_t gnc, void *closure)
     return c;
 }
 
+static int
+parse_neighbour_cost_bias_command(int c, gnc_t gnc, void *closure)
+{
+    char *ifname = NULL, *token = NULL;
+    unsigned char *address = NULL;
+    int af, bias = 0, expires_msecs = 0;
+
+    c = getword(c, &ifname, gnc, closure);
+    if(c < -1)
+        goto fail;
+
+    c = getip(c, &address, &af, gnc, closure);
+    if(c < -1 || af != AF_INET6)
+        goto fail;
+
+    c = getint(c, &bias, gnc, closure);
+    if(c < -1 || bias < 0 || bias >= INFINITY)
+        goto fail;
+
+    c = skip_whitespace(c, gnc, closure);
+    if(c >= 0 && c != '\n' && c != '#') {
+        c = getword(c, &token, gnc, closure);
+        if(c < -1 || strcmp(token, "expires-ms") != 0)
+            goto fail;
+        c = getint(c, &expires_msecs, gnc, closure);
+        if(c < -1 || expires_msecs < 0)
+            goto fail;
+        c = skip_whitespace(c, gnc, closure);
+    }
+
+    c = skip_eol(c, gnc, closure);
+    if(c < -1)
+        goto fail;
+
+    /* Stage 1 only parses the local socket bias command; later stages apply it. */
+    free(token);
+    free(address);
+    free(ifname);
+    return c;
+
+ fail:
+    free(token);
+    free(address);
+    free(ifname);
+    return -2;
+}
+
 static void
 free_filter(struct filter *f)
 {
@@ -1247,6 +1294,12 @@ parse_config_line(int c, gnc_t gnc, void *closure,
             free(token2);
             goto fail;
         }
+    } else if(strcmp(token, "neighbour-cost") == 0) {
+        if(!config_finalised)
+            goto fail;
+        c = parse_neighbour_cost_bias_command(c, gnc, closure);
+        if(c < -1)
+            goto fail;
     } else if(strcmp(token, "reopen-logfile") == 0) {
         c = skip_eol(c, gnc, closure);
         if(c < -1 || !action_return)
