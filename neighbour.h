@@ -65,6 +65,8 @@ extern struct neighbour *neighs;
 
 struct neighbour *find_neighbour(const unsigned char *address,
                                  struct interface *ifp);
+struct neighbour *find_neighbour_nocreate(const unsigned char *address,
+                                          struct interface *ifp);
 int update_neighbour(struct neighbour *neigh, struct hello_history *hist,
                      int unicast, int hello, int hello_interval);
 unsigned check_neighbours(void);

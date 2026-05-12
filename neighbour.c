@@ -42,7 +42,7 @@ THE SOFTWARE.
 
 struct neighbour *neighs = NULL;
 
-static struct neighbour *
+struct neighbour *
 find_neighbour_nocreate(const unsigned char *address, struct interface *ifp)
 {
     struct neighbour *neigh;
