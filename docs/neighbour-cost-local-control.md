@@ -7,6 +7,28 @@ per-neighbour link cost bias without extending the Babel protocol. The command
 lives on babeld's local control socket. The resulting route metrics will later
 flow through normal Babel Updates.
 
+## Terminology
+
+`neighbour-cost` is the stable cost-control command. "Cost control" is the
+umbrella concept: it covers any local external adjustment of babeld's native
+per-neighbour link cost.
+
+The MVP exposes only the additive term, named `external-bias` in monitor output
+and docs:
+
+```text
+final_cost = babeld_existing_cost + external_bias + rtt_penalty
+```
+
+In a future linear transform, that same bias remains the `B` term:
+
+```text
+final_cost = C * babeld_existing_cost + external_bias + rtt_penalty
+```
+
+So `_cost` in command/request naming is intentional at the umbrella API level,
+while `external-bias` is the precise name for the currently exposed parameter.
+
 ## Command
 
 ```text
@@ -46,14 +68,18 @@ This command follows the existing local socket model:
 - `bad`: malformed command syntax.
 - `no <reason>`: syntactically valid but not applicable.
 
-Stage 1 only produces `ok` or `bad`, because semantic lookup is not wired yet.
+Stage 2 produces `ok`, `bad`, and semantic `no ...` responses, but does not yet
+store or apply any bias state.
 
-Expected later `no` cases:
+Internally, syntax parsing produces a request object. Semantic validation is a
+separate command-handler step, and typed validation failures are mapped to the
+local-control `no ...` strings in that layer.
+
+Current `no` cases:
 
 - no such interface
 - address is not link-local
 - no such neighbour on that interface
-- bias expiry is invalid for the current neighbour state
 
 ## Monitor Output Target
 

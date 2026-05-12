@@ -2,22 +2,26 @@
 
 ## Current Stage
 
-Stage 1 is implemented in babeld only.
+Stage 2 is implemented in babeld only.
 
 Implemented:
 
 - Added a local-control command parser for `neighbour-cost`.
 - The command is accepted only after configuration has been finalised.
 - The existing read-write local socket gate still applies.
-- Valid command syntax returns `ok`.
+- Valid command syntax and semantics return `ok`.
 - Invalid command syntax returns `bad`.
-- The command is a no-op: it does not store state, change metrics, or emit neighbour updates.
+- Semantic validation failures return `no <reason>`.
+- The command is still a no-op after validation: it does not store state, change metrics, or emit neighbour updates.
+- Implemented semantic validation for interface existence, link-local address, and existing neighbour lookup.
+- Parsing now produces a local request object before validation/application.
+- Semantic validation uses typed internal results which are mapped to local-control response strings in `configuration.c`.
+- `interface.c` exposes interface lookup, and `neighbour.c` exposes non-creating neighbour lookup; no validation-only setter is exported.
 
 Not implemented yet:
 
-- Interface lookup.
-- Link-local neighbour lookup.
 - Per-neighbour bias state.
+- A real cost-control mutator.
 - Monitor/dump output fields for external bias.
 - Metric recomputation.
 - Expiry handling.
@@ -25,22 +29,35 @@ Not implemented yet:
 
 Verification:
 
-- `make` passes with `-Wall`.
+- `nix develop -c make` passes with `-Wall`.
+- `nix develop -c make test` passes after cleaning stale non-test objects.
 
-## Stage 1 Command Grammar
+## Command Grammar
 
 ```text
-neighbour-cost <ifname> <ipv6-address> <cost>
-neighbour-cost <ifname> <ipv6-address> <cost> expires-ms <milliseconds>
+neighbour-cost <ifname> <ipv6-address> <bias>
+neighbour-cost <ifname> <ipv6-address> <bias> expires-ms <milliseconds>
 ```
 
 Current parser validation:
 
 - `<ifname>` must be a word.
 - `<ipv6-address>` must parse as an IPv6 address.
-- `<cost>` is interpreted as a non-negative bias and must be `0..65534`.
+- `<bias>` must be `0..65534`.
 - `0` clears the intended bias in later stages.
 - `expires-ms` requires a non-negative millisecond value.
+
+Current semantic validation:
+
+- `<ifname>` must name an existing babeld interface.
+- `<ipv6-address>` must be link-local.
+- The neighbour must already exist on the named interface.
+
+Current semantic failure responses:
+
+- `no No such interface`
+- `no Address is not link-local`
+- `no No such neighbour`
 
 Planned semantics:
 

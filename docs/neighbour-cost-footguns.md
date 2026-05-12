@@ -50,3 +50,14 @@ renewing it, and babeld falls back to unbiased scoring when renewal stops.
 Downstream consumers may parse local socket output strictly. When neighbour
 monitor lines change, update consumers and tests in lockstep or add a clearly
 versioned compatibility path.
+
+## Keep Boundaries Honest
+
+Do not name validation-only helpers as setters. Cost-control mutators should be
+introduced only when they actually mutate neighbour state. Keep local-control
+response strings in the local/config command layer; lower layers should return
+typed results or domain objects.
+
+Use `cost` for the long-lived umbrella feature and API concept. Use
+`external-bias` for the MVP additive term. If future linear cost control lands,
+add separate coefficient/scale naming rather than renaming `external-bias`.
