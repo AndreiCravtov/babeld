@@ -64,6 +64,19 @@ last_interface(void)
 }
 
 struct interface *
+find_interface(const char *ifname)
+{
+    struct interface *ifp;
+
+    FOR_ALL_INTERFACES(ifp) {
+        if(strcmp(ifp->name, ifname) == 0)
+            return ifp;
+    }
+
+    return NULL;
+}
+
+struct interface *
 add_interface(char *ifname, struct interface_conf *if_conf)
 {
     struct interface *ifp;
