@@ -50,6 +50,8 @@ native per-neighbour link cost.
 
 `expires-ms` is syntactically valid with any bias value, including `0`. An
 expiry of `0` is accepted and means immediate expiry in later stages.
+The value must be non-negative and must fit the existing `getint` parser; there
+is no separate upper-bound check after parsing.
 
 The planned final formula is:
 
@@ -72,8 +74,9 @@ Stage 2 produces `ok`, `bad`, and semantic `no ...` responses, but does not yet
 store or apply any bias state.
 
 Internally, syntax parsing produces a request object. Semantic validation is a
-separate command-handler step, and typed validation failures are mapped to the
-local-control `no ...` strings in that layer.
+separate command-handler step in `configuration.c`. For Stage 2, semantic
+rejections return local-control `no ...` strings directly, matching nearby
+commands such as `flush interface`.
 
 Current `no` cases:
 

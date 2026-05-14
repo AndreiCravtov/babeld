@@ -37,6 +37,7 @@ THE SOFTWARE.
 #include "babeld.h"
 #include "util.h"
 #include "interface.h"
+#include "neighbour.h"
 #include "route.h"
 #include "kernel.h"
 #include "hmac.h"
@@ -46,6 +47,14 @@ static struct filter *input_filters = NULL;
 static struct filter *output_filters = NULL;
 static struct filter *redistribute_filters = NULL;
 static struct filter *install_filters = NULL;
+
+struct neighbour_cost_request {
+    char *ifname;
+    unsigned char address[16];
+    unsigned bias;
+    unsigned expires_msecs;
+    int has_expiry;
+};
 struct interface_conf *default_interface_conf = NULL;
 static struct interface_conf *interface_confs = NULL;
 
@@ -355,12 +364,27 @@ gethex(int c, unsigned char **value_r, int *len_r, gnc_t gnc, void *closure)
     return c;
 }
 
-static int
-parse_neighbour_cost_bias_command(int c, gnc_t gnc, void *closure)
+static void
+free_neighbour_cost_request(struct neighbour_cost_request *request)
 {
+    if(request == NULL)
+        return;
+    free(request->ifname);
+    free(request);
+}
+
+static int
+parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
+                             struct neighbour_cost_request **request_return)
+{
+    struct neighbour_cost_request *request;
     char *ifname = NULL, *token = NULL;
     unsigned char *address = NULL;
     int af, bias = 0, expires_msecs = 0;
+
+    request = calloc(1, sizeof(struct neighbour_cost_request));
+    if(request == NULL)
+        return -2;
 
     c = getword(c, &ifname, gnc, closure);
     if(c < -1)
@@ -369,10 +393,14 @@ parse_neighbour_cost_bias_command(int c, gnc_t gnc, void *closure)
     c = getip(c, &address, &af, gnc, closure);
     if(c < -1 || af != AF_INET6)
         goto fail;
+    memcpy(request->address, address, 16);
+    free(address);
+    address = NULL;
 
     c = getint(c, &bias, gnc, closure);
     if(c < -1 || bias < 0 || bias >= INFINITY)
         goto fail;
+    request->bias = bias;
 
     c = skip_whitespace(c, gnc, closure);
     if(c >= 0 && c != '\n' && c != '#') {
@@ -382,6 +410,8 @@ parse_neighbour_cost_bias_command(int c, gnc_t gnc, void *closure)
         c = getint(c, &expires_msecs, gnc, closure);
         if(c < -1 || expires_msecs < 0)
             goto fail;
+        request->has_expiry = 1;
+        request->expires_msecs = expires_msecs;
         c = skip_whitespace(c, gnc, closure);
     }
 
@@ -389,17 +419,43 @@ parse_neighbour_cost_bias_command(int c, gnc_t gnc, void *closure)
     if(c < -1)
         goto fail;
 
-    /* Stage 1 only parses the local socket bias command; later stages apply it. */
     free(token);
-    free(address);
-    free(ifname);
+    request->ifname = ifname;
+    *request_return = request;
     return c;
 
  fail:
     free(token);
     free(address);
     free(ifname);
+    free_neighbour_cost_request(request);
     return -2;
+}
+
+static const char *
+apply_neighbour_cost_request(const struct neighbour_cost_request *request)
+{
+    struct interface *ifp;
+    struct neighbour *neigh;
+
+    ifp = find_interface(request->ifname);
+    if(ifp == NULL)
+        return "No such interface";
+
+    if(!linklocal(request->address))
+        return "Address is not link-local";
+
+    neigh = find_neighbour_nocreate(request->address, ifp);
+    if(neigh == NULL)
+        return "No such neighbour";
+
+    /* Stage 2 only validates the local socket command; later stages apply it. */
+    (void)neigh;
+    (void)request->bias;
+    (void)request->expires_msecs;
+    (void)request->has_expiry;
+
+    return NULL;
 }
 
 static void
@@ -1295,11 +1351,21 @@ parse_config_line(int c, gnc_t gnc, void *closure,
             goto fail;
         }
     } else if(strcmp(token, "neighbour-cost") == 0) {
+        struct neighbour_cost_request *request;
+        const char *message;
         if(!config_finalised)
             goto fail;
-        c = parse_neighbour_cost_bias_command(c, gnc, closure);
+        c = parse_neighbour_cost_command(c, gnc, closure, &request);
         if(c < -1)
             goto fail;
+        message = apply_neighbour_cost_request(request);
+        if(message != NULL) {
+            if(action_return)
+                *action_return = CONFIG_ACTION_NO;
+            if(message_return)
+                *message_return = message;
+        }
+        free_neighbour_cost_request(request);
     } else if(strcmp(token, "reopen-logfile") == 0) {
         c = skip_eol(c, gnc, closure);
         if(c < -1 || !action_return)

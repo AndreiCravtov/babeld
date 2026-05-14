@@ -14,6 +14,12 @@ Status: done.
 
 Status: done.
 
+Style priority: keep this feature visually and organisationally native to
+babeld. Prefer the patterns already present in `configuration.c` and nearby
+modules over introducing new architectural shapes. This includes local-control
+response handling, parser out-parameter style, ownership conventions, and where
+temporary or durable structs live.
+
 - Add interface and non-creating neighbour lookup helpers.
 - Add a command-handler validation/application function in `configuration.c`.
 - Validate interface existence.
@@ -21,9 +27,33 @@ Status: done.
 - Validate neighbour existence on that interface.
 - Return `no <reason>` for semantic failures.
 - Keep metric behavior unchanged.
-- Parser produces a request object; validation/application is a separate command handler.
-- Validation uses typed internal results, then maps to local-control response strings.
+- Parser produces a heap-allocated request object, returned through a
+  `struct neighbour_cost_request **`, matching the compound-object parser style
+  used for filters, interface config, and keys. This is local-control parsing,
+  so avoiding one short-lived allocation is not important.
+- Validation/application is a separate command handler.
+- Validation returns local-control response strings directly in `configuration.c`,
+  matching nearby command handling such as `flush interface`.
 - Interface and neighbour layers expose lookup helpers, not local-control response logic.
+
+Architecture note: `configuration.c` is an acceptable temporary home for the
+local-control parser and Stage 2 validation stub, because this command currently
+enters through `parse_config_line`. Later stages should avoid making
+`configuration.c` the long-term owner of neighbour cost behavior. Once real
+state, notifications, metric updates, and expiry exist, keep the parser in the
+local-control/config layer but move neighbour-domain mutation behind a neighbour
+or cost-control API.
+
+Struct-placement note: existing parsed compound objects are generally durable
+objects declared outside `configuration.c`, such as `struct filter` in
+`configuration.h` and `struct interface_conf` / `struct key` in `interface.h`.
+The only structs currently defined in `configuration.c` besides
+`neighbour_cost_request` are parser input-state helpers. Therefore
+`neighbour_cost_request` should be treated as a temporary Stage 2 convenience,
+not a pattern to expand. If it remains purely local and short-lived, consider
+inlining it into the command parser/handler before shipping. If later stages
+need a durable cost-control object, move that concept to the owning module
+rather than growing private command DTOs in `configuration.c`.
 
 Correction: the real mutator name should be reserved for a later stage and
 should reflect the stable cost-control abstraction. Prefer a name such as

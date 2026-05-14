@@ -61,3 +61,12 @@ typed results or domain objects.
 Use `cost` for the long-lived umbrella feature and API concept. Use
 `external-bias` for the MVP additive term. If future linear cost control lands,
 add separate coefficient/scale naming rather than renaming `external-bias`.
+
+## Match Local Organisation
+
+This change should feel native to babeld, not like a new subsystem grafted into
+the parser. Before adding helper structs, callbacks, result types, or ownership
+patterns, check whether `configuration.c` already uses that shape for similar
+commands. Existing parsed compound objects are durable objects declared in
+headers; purely local command request structs should be avoided unless they keep
+an incremental stage materially clearer.

@@ -1,4 +1,4 @@
-# Neighbour Cost Bias Status
+# Neighbour Cost Status
 
 ## Current Stage
 
@@ -14,8 +14,8 @@ Implemented:
 - Semantic validation failures return `no <reason>`.
 - The command is still a no-op after validation: it does not store state, change metrics, or emit neighbour updates.
 - Implemented semantic validation for interface existence, link-local address, and existing neighbour lookup.
-- Parsing now produces a local request object before validation/application.
-- Semantic validation uses typed internal results which are mapped to local-control response strings in `configuration.c`.
+- Parsing now produces a heap-allocated local request object before validation/application, matching the compound-object parser style in `configuration.c`.
+- Semantic validation returns local-control response strings directly in `configuration.c`, matching nearby command handling such as `flush interface`.
 - `interface.c` exposes interface lookup, and `neighbour.c` exposes non-creating neighbour lookup; no validation-only setter is exported.
 
 Not implemented yet:
@@ -45,7 +45,8 @@ Current parser validation:
 - `<ipv6-address>` must parse as an IPv6 address.
 - `<bias>` must be `0..65534`.
 - `0` clears the intended bias in later stages.
-- `expires-ms` requires a non-negative millisecond value.
+- `expires-ms` requires a non-negative millisecond value accepted by the
+  existing `getint` parser; there is no separate post-parse upper-bound check.
 
 Current semantic validation:
 
