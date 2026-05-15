@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 2 is implemented in babeld only.
+Stage 3 is implemented in babeld only.
 
 Implemented:
 
@@ -17,12 +17,15 @@ Implemented:
 - Parsing now produces a heap-allocated local request object before validation/application, matching the compound-object parser style in `configuration.c`.
 - Semantic validation returns local-control response strings directly in `configuration.c`, matching nearby command handling such as `flush interface`.
 - `interface.c` exposes interface lookup, and `neighbour.c` exposes non-creating neighbour lookup; no validation-only setter is exported.
+- Neighbour monitor/dump output includes `external-bias-256`,
+  `external-coef-256`, and `external-cost-expiry-ms` fields.
+- Stage 3 accessors return the neutral transform until real per-neighbour state
+  is added: `bias-256 0`, `coef-256 256`, `expiry-ms 0`.
 
 Not implemented yet:
 
-- Per-neighbour bias state.
+- Per-neighbour external cost-control state.
 - A real cost-control mutator.
-- Monitor/dump output fields for external bias.
 - Metric recomputation.
 - Expiry handling.
 - Man page updates.
@@ -35,18 +38,23 @@ Verification:
 ## Command Grammar
 
 ```text
-neighbour-cost <ifname> <ipv6-address> <bias>
-neighbour-cost <ifname> <ipv6-address> <bias> expires-ms <milliseconds>
+neighbour-cost <ifname> <ipv6-address> bias-256 <int> coef-256 <nat> expiry-ms <nat>
 ```
 
 Current parser validation:
 
 - `<ifname>` must be a word.
 - `<ipv6-address>` must parse as an IPv6 address.
-- `<bias>` must be `0..65534`.
-- `0` clears the intended bias in later stages.
-- `expires-ms` requires a non-negative millisecond value accepted by the
-  existing `getint` parser; there is no separate post-parse upper-bound check.
+- `bias-256` is mandatory and must be followed by a signed integer in
+  `-(65534 * 256)..+(65534 * 256)`.
+- `coef-256` is mandatory and must be followed by a non-negative integer in
+  `0..65535`.
+- `expiry-ms` is mandatory and must be followed by a non-negative integer
+  accepted by the existing `getint` parser.
+- `expiry-ms 0` means no expiry is scheduled. Positive values are relative
+  millisecond timeouts.
+- `<int>` and `<nat>` inherit the existing `getint()` base-0 syntax; they are
+  not documented as strict decimal-only values.
 
 Current semantic validation:
 
@@ -60,11 +68,45 @@ Current semantic failure responses:
 - `no Address is not link-local`
 - `no No such neighbour`
 
-Planned semantics:
+## Monitor/Dump Output
+
+Neighbour local-control lines now include schema-stable external cost-control
+fields:
 
 ```text
-final_cost = babeld_existing_cost + external_bias + rtt_penalty
+change neighbour ... rxcost 96 txcost 96 external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost 96
 ```
 
-The external value is a bias added to babeld's native link cost, not a
-replacement for it.
+Stage 3 always reports the neutral transform and no expiry. Stage 4 will connect
+these fields to real per-neighbour state.
+
+## Planned Semantics
+
+```text
+raw_256 = coef_256 * babeld_native_base_cost
+        + bias_256
+        + 256 * rtt_penalty
+
+if raw_256 <= 256:
+    final_cost = 1
+else if raw_256 >= INFINITY * 256 - 128:
+    final_cost = INFINITY
+else:
+    final_cost = (raw_256 + 128) / 256
+```
+
+Liveness checks remain outside the transform: an unusable neighbour still has
+cost `INFINITY`. Metric integration should compute `raw_256` in a wide signed
+integer.
+
+## Stage 3 Transcript
+
+Stage 3 accepts the full schema but still reports neutral monitor state because
+per-neighbour storage is not implemented yet:
+
+```text
+> neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256 expiry-ms 30000
+ok
+> dump
+add neighbour ... external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost ...
+```

@@ -1,36 +1,52 @@
 # Neighbour Cost Future Directions
 
-## Cost Control Terminology
+## Decimal Input
 
-External cost control is the stable feature concept. The MVP exposes only the
-additive bias term. A future version may expose a coefficient/scale term too.
-
-The term `external-bias` should remain the additive `B` term even if a
-coefficient is added later.
-
-## Linear Cost Transform
-
-The MVP uses a bias-only model:
+Stage 3 uses explicit fixed-point integer keywords:
 
 ```text
-final_cost = babeld_existing_cost + external_bias + rtt_penalty
+bias-256 <int> coef-256 <nat>
 ```
 
-A future extension could generalise this to a linear transform:
+A future version may accept decimal keywords such as:
 
 ```text
-final_cost = C * babeld_existing_cost + external_bias + rtt_penalty
+bias <decimal> coef <decimal>
 ```
 
-This can model both useful paradigms:
+If decimal syntax is added, it should either coexist with the fixed-point
+keywords or be introduced through a versioned compatibility path. Existing local
+socket consumers may parse command grammar and monitor output strictly.
 
-- `C = 1`: preserve babeld's native cost and add only `external_bias`.
-- `C = 0`: replace babeld's native cost with the externally supplied bias term,
-  effectively treating `external_bias` as a complete externally
-  computed cost.
-- `C > 1`: penalise links proportionally to babeld's native cost.
-- `0 < C < 1`: make links more attractive while still preserving babeld's native
-  ordering signal.
+## Current Fixed-Point Transform
+
+The fixed-point transform is:
+
+```text
+raw_256 = coef_256 * babeld_native_base_cost
+        + bias_256
+        + 256 * rtt_penalty
+
+if raw_256 <= 256:
+    final_cost = 1
+else if raw_256 >= INFINITY * 256 - 128:
+    final_cost = INFINITY
+else:
+    final_cost = (raw_256 + 128) / 256
+```
+
+`babeld_native_base_cost` means the wired or ETX link cost before the RTT
+penalty is added. RTT penalty remains outside the external coefficient unless a
+future design explicitly changes that.
+
+Useful points:
+
+- `coef-256 256`: preserve babeld's native base cost.
+- `coef-256 0`: ignore babeld's native base cost.
+- `coef-256 128`: halve babeld's native base cost.
+- `coef-256 512`: double babeld's native base cost.
+- `bias-256 256`: add one cost unit.
+- `bias-256 -256`: subtract one cost unit.
 
 The implementation should still keep liveness checks outside the transform:
 
@@ -38,42 +54,42 @@ The implementation should still keep liveness checks outside the transform:
 if interface down or txcost/rxcost infinite:
     final_cost = INFINITY
 else:
-    final_cost = C * babeld_existing_cost + external_bias + rtt_penalty
+    apply the final clamp/round algorithm
 ```
 
-## Fixed-Point Encoding
+## Ranges
 
-If this is implemented on the local control socket, `C` should likely be fixed
-point rather than floating point. For example, `C256 = 256` can mean `C = 1.0`:
+Stage 3 parser ranges:
 
 ```text
-transformed = (C256 * babeld_existing_cost + 128) / 256 + external_bias
+bias-256: -(65534 * 256) .. +(65534 * 256)
+coef-256: 0 .. 65535
+expiry-ms: 0 .. parser maximum
 ```
 
-The neutral transform would be:
+`bias-256` is larger than `coef-256` because it is measured in cost units, not
+as a multiplier. `coef-256` is non-negative because a negative coefficient
+inverts babeld's native cost signal: worse native links would receive a larger
+reward. `coef-256 65535` is already roughly `255.996x`, which is far beyond
+practical use and will often saturate after clamping.
+
+Metric integration should use a wide signed integer for intermediate arithmetic
+and clamp only at the final output boundary.
+
+## Expiry Representation
+
+Keep the local-control input as a relative millisecond timeout:
 
 ```text
-C256 = 256
-external_bias = 0
+expiry-ms <milliseconds>
 ```
 
-The bias-only MVP is equivalent to keeping `C256 = 256` and exposing only
-`external_bias`.
+Do not switch to Unix timestamps. babeld's internal `gettime()` is monotonic
+when possible, and most internal scheduling stores deadlines as `struct timeval`
+values computed from the current monotonic `now`. A Unix timestamp would be a
+wall-clock value, would be vulnerable to clock changes or clock skew between the
+controller and babeld, and would still need conversion into babeld's monotonic
+deadline model.
 
-## Compatibility
-
-The existing command grammar:
-
-```text
-neighbour-cost <ifname> <link-local-neighbour> <bias> [expires-ms <milliseconds>]
-```
-
-should remain valid if a coefficient is added. Future scale/coefficient controls
-should be optional extensions, for example:
-
-```text
-neighbour-cost <ifname> <link-local-neighbour> <bias> [coefficient-256 <value>] [expires-ms <milliseconds>]
-```
-
-Monitor output should keep `external-bias` and add a new field such as
-`external-cost-coefficient` or `external-cost-scale`.
+Stage 4 should convert positive `expiry-ms` values into `now + expiry_ms`.
+`expiry-ms 0` means no expiry and can be represented by a zero deadline.

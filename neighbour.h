@@ -73,5 +73,8 @@ unsigned check_neighbours(void);
 unsigned neighbour_txcost(struct neighbour *neigh);
 unsigned neighbour_rxcost(struct neighbour *neigh);
 unsigned neighbour_rttcost(struct neighbour *neigh);
+int neighbour_external_bias_256(struct neighbour *neigh);
+unsigned neighbour_external_coef_256(struct neighbour *neigh);
+unsigned neighbour_external_cost_expiry_msecs(struct neighbour *neigh);
 unsigned neighbour_cost(struct neighbour *neigh);
 int valid_rtt(struct neighbour *neigh);

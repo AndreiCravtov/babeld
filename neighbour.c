@@ -334,6 +334,27 @@ neighbour_rttcost(struct neighbour *neigh)
     }
 }
 
+int
+neighbour_external_bias_256(struct neighbour *neigh)
+{
+    (void)neigh;
+    return 0;
+}
+
+unsigned
+neighbour_external_coef_256(struct neighbour *neigh)
+{
+    (void)neigh;
+    return 256;
+}
+
+unsigned
+neighbour_external_cost_expiry_msecs(struct neighbour *neigh)
+{
+    (void)neigh;
+    return 0;
+}
+
 unsigned
 neighbour_cost(struct neighbour *neigh)
 {

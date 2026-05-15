@@ -5,7 +5,7 @@
 Status: done.
 
 - Add `neighbour-cost` as a local-control command.
-- Parse the intended bias grammar.
+- Parse the intended cost-control grammar.
 - Return `ok` for valid syntax.
 - Return `bad` for malformed syntax.
 - Do not store or apply any state.
@@ -25,6 +25,9 @@ temporary or durable structs live.
 - Validate interface existence.
 - Validate IPv6 link-local address.
 - Validate neighbour existence on that interface.
+- Require `bias-256 <int> coef-256 <nat> expiry-ms <nat>` in the
+  command grammar.
+- Treat `expiry-ms 0` as explicit no-expiry state.
 - Return `no <reason>` for semantic failures.
 - Keep metric behavior unchanged.
 - Parser produces a heap-allocated request object, returned through a
@@ -59,41 +62,53 @@ Correction: the real mutator name should be reserved for a later stage and
 should reflect the stable cost-control abstraction. Prefer a name such as
 `set_neighbour_cost_control(...)`,
 `set_neighbour_external_cost_params(...)`, or
-`set_neighbour_cost_adjustment(...)` rather than a bias-only setter named as if
-it replaced the whole cost.
+`set_neighbour_cost_adjustment(...)`.
 
-## Stage 3: Observable State Fields
+## Stage 3: Command And Monitor Schema Stabilization
 
-- Add neighbour monitor/dump fields for external-bias state.
-- Initially report `external-bias 0 external-bias-expiry-ms 0`.
-- Add accessors such as `neighbour_external_bias()` and
-  `neighbour_external_bias_expiry_msecs()`; `local.c` should not reach into
+Status: done.
+
+- Stabilise the keyworded command grammar:
+  `bias-256 <int> coef-256 <nat> expiry-ms <nat>`.
+- Add neighbour monitor/dump fields for external cost-control state.
+- Initially report
+  `external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0`.
+- Add accessors such as `neighbour_external_bias_256()`,
+  `neighbour_external_coef_256()`, and
+  `neighbour_external_cost_expiry_msecs()`; `local.c` should not reach into
   future state directly.
 - Update downstream parsers against this stable line shape.
 
 ## Stage 4: Per-Neighbour State
 
-- Add `external_bias` and `external_bias_expiry` to `struct neighbour`.
-- Add helpers to read bias state and remaining expiry time.
+- Add `external_bias_256`, `external_coef_256`, and
+  `external_cost_expiry` to `struct neighbour`.
+- Add helpers to read external cost-control state and remaining expiry time.
 - Add a real cost-control mutator, e.g. `set_neighbour_cost_control(...)`.
-- Make the mutator store and clear the bias.
-- Emit neighbour notifications when visible bias state changes, even before
+- Make the mutator store and clear the fixed-point transform.
+- Store positive `expiry-ms` values as monotonic `now + expiry_ms` deadlines;
+  store `0` as no expiry.
+- Preserve visible neutral state with positive expiry rather than collapsing it:
+  `bias-256 0 coef-256 256 expiry-ms N` should report a neutral transform with
+  a remaining expiry until it expires back to neutral/no-expiry.
+- Emit neighbour notifications when visible cost-control state changes, even before
   metric integration exists.
 
 ## Stage 5: Metric Integration
 
 - Keep existing liveness checks first.
 - Compute the existing wired or ETX base cost.
-- Add the external bias when non-zero.
+- Apply the fixed-point external transform.
 - Preserve RTT penalty handling.
 - Call `update_neighbour_metric()` when the effective cost changes.
 
 ## Stage 6: Expiry
 
-- Schedule neighbour checks for expiring biases.
-- Clear expired biases in `check_neighbours()`.
+- Schedule neighbour checks for expiring external cost-control state.
+- Clear expired positive-timeout external cost-control state in
+  `check_neighbours()`.
 - Emit neighbour change events through existing update paths.
-- Include the next external-bias expiry in the returned check interval.
+- Include the next external-cost expiry in the returned check interval.
 
 ## Stage 7: Man Page
 
@@ -106,14 +121,10 @@ it replaced the whole cost.
 - Add local socket transcript examples.
 - Verify accepted commands, rejected commands, monitor events, route metric changes, and expiry fallback.
 
-## Future Direction: Linear Transform
+## Future Direction: Decimal Transform
 
-- Consider generalising bias-only semantics to
-  `C * babeld_existing_cost + external_bias`.
-- Keep the MVP bias-only until the external scorer actually needs replacement or proportional scaling.
-- Preserve backward compatibility for the current command grammar; future scale
-  or coefficient parameters should be optional extensions.
-- Keep monitor field `external-bias` as the additive `B` term. If a coefficient
-  lands later, add a new field such as `external-cost-coefficient` or
-  `external-cost-scale` instead of renaming `external-bias`.
+- Consider accepting decimal `bias` and `coef` keywords in addition to the
+  fixed-point `bias-256` and `coef-256` keywords.
+- Keep backward compatibility for the current command grammar unless a clear
+  versioned compatibility path exists.
 - See `docs/neighbour-cost-future-directions.md`.

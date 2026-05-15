@@ -51,9 +51,9 @@ static struct filter *install_filters = NULL;
 struct neighbour_cost_request {
     char *ifname;
     unsigned char address[16];
-    unsigned bias;
-    unsigned expires_msecs;
-    int has_expiry;
+    int bias_256;
+    unsigned coef_256;
+    unsigned expiry_msecs;
 };
 struct interface_conf *default_interface_conf = NULL;
 static struct interface_conf *interface_confs = NULL;
@@ -377,19 +377,25 @@ static int
 parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
                              struct neighbour_cost_request **request_return)
 {
-    struct neighbour_cost_request *request;
+    // consts
+    const int max_bias_256 = (INFINITY - 1) * 256;
+    const int max_coef_256 = 65535;
+
+    // decls
     char *ifname = NULL, *token = NULL;
     unsigned char *address = NULL;
-    int af, bias = 0, expires_msecs = 0;
+    int af, bias_256 = 0, coef_256 = 0, expiry_msecs = 0;
 
-    request = calloc(1, sizeof(struct neighbour_cost_request));
+    struct neighbour_cost_request *request = calloc(1, sizeof(struct neighbour_cost_request));
     if(request == NULL)
         return -2;
 
+    // parse interface name
     c = getword(c, &ifname, gnc, closure);
     if(c < -1)
         goto fail;
 
+    // parse IPv6 address
     c = getip(c, &address, &af, gnc, closure);
     if(c < -1 || af != AF_INET6)
         goto fail;
@@ -397,29 +403,54 @@ parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
     free(address);
     address = NULL;
 
-    c = getint(c, &bias, gnc, closure);
-    if(c < -1 || bias < 0 || bias >= INFINITY)
+    // parse "bias-256" token
+    c = getword(c, &token, gnc, closure);
+    if(c < -1 || strcmp(token, "bias-256") != 0)
         goto fail;
-    request->bias = bias;
+    free(token);
+    token = NULL;
 
-    c = skip_whitespace(c, gnc, closure);
-    if(c >= 0 && c != '\n' && c != '#') {
-        c = getword(c, &token, gnc, closure);
-        if(c < -1 || strcmp(token, "expires-ms") != 0)
-            goto fail;
-        c = getint(c, &expires_msecs, gnc, closure);
-        if(c < -1 || expires_msecs < 0)
-            goto fail;
-        request->has_expiry = 1;
-        request->expires_msecs = expires_msecs;
-        c = skip_whitespace(c, gnc, closure);
-    }
+    // parse bias fixed-point decimal (within range)
+    c = getint(c, &bias_256, gnc, closure);
+    if(c < -1 ||
+       bias_256 < -max_bias_256 ||
+       bias_256 > max_bias_256)
+        goto fail;
+    request->bias_256 = bias_256;
 
+    // parse "coef-256" token
+    c = getword(c, &token, gnc, closure);
+    if(c < -1 || strcmp(token, "coef-256") != 0)
+        goto fail;
+    free(token);
+    token = NULL;
+
+    // parse coefficient fixed-point positive decimal
+    c = getint(c, &coef_256, gnc, closure);
+    if(c < -1 ||
+       coef_256 < 0 ||
+       coef_256 > max_coef_256)
+        goto fail;
+    request->coef_256 = coef_256;
+
+    // parse "expiry-ms" token
+    c = getword(c, &token, gnc, closure);
+    if(c < -1 || strcmp(token, "expiry-ms") != 0)
+        goto fail;
+    free(token);
+    token = NULL;
+
+    // parse expiry milliseconds natural number
+    c = getint(c, &expiry_msecs, gnc, closure);
+    if(c < -1 || expiry_msecs < 0)
+        goto fail;
+    request->expiry_msecs = expiry_msecs;
+
+    // parse whitespace/comments until EOL
     c = skip_eol(c, gnc, closure);
     if(c < -1)
         goto fail;
 
-    free(token);
     request->ifname = ifname;
     *request_return = request;
     return c;
@@ -449,11 +480,11 @@ apply_neighbour_cost_request(const struct neighbour_cost_request *request)
     if(neigh == NULL)
         return "No such neighbour";
 
-    /* Stage 2 only validates the local socket command; later stages apply it. */
+    /* Stage 3 only validates the local socket command; later stages apply it. */
     (void)neigh;
-    (void)request->bias;
-    (void)request->expires_msecs;
-    (void)request->has_expiry;
+    (void)request->bias_256;
+    (void)request->coef_256;
+    (void)request->expiry_msecs;
 
     return NULL;
 }

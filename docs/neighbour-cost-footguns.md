@@ -8,20 +8,31 @@ normal route metrics that result from local route selection.
 
 ## Do Not Bypass Link Liveness
 
-External bias must not make a dead neighbour usable. The existing checks for
-interface state, IHU `txcost`, and Hello-derived `rxcost` must remain before the
-bias is applied.
+External cost control must not make a dead neighbour usable. The existing checks
+for interface state, IHU `txcost`, and Hello-derived `rxcost` must remain before
+the transform is applied.
 
-## Do Not Replace Babel's Native Cost
+## Clamp Only At The Boundary
 
-For the MVP, the external value is a non-negative bias:
+The fixed-point transform may produce a value outside Babel's finite metric
+range, especially with signed bias values and large coefficients:
 
 ```text
-final_cost = babeld_existing_cost + external_bias + rtt_penalty
+raw_256 = coef_256 * babeld_native_base_cost
+        + bias_256
+        + 256 * rtt_penalty
 ```
 
-This preserves babeld's native wired/ETX signal and only makes selected links
-less preferred.
+Do the arithmetic in a wide signed type, then clamp the rounded final result
+once at the protocol boundary. Do not clamp each term independently unless a
+specific overflow or safety invariant requires it.
+
+## Do Not Invert Native Cost By Default
+
+`coef-256` is intentionally non-negative. A negative coefficient would reward
+higher babeld native costs, causing worse links to become more attractive after
+the final clamp. Use signed `bias-256` for preference shifts, and use
+`coef-256 0` plus `bias-256` for replacement-style external scoring.
 
 ## Avoid Metric Churn
 
@@ -35,15 +46,19 @@ Do not reject harmless input just because it is not expected to be useful. The
 local control surface should enforce invariants that matter for correctness and
 clear parsing, but avoid policy restrictions that make clients more brittle.
 
-For example, `neighbour-cost IFADDR 0 expires-ms N` is a no-op that expires into
-the same no-op. That is harmless, so it should be accepted rather than rejected.
-Likewise, `expires-ms 0` is just immediate expiry, which is harmless.
+For example, the neutral command
+`neighbour-cost IFNAME ADDR bias-256 0 coef-256 256 expiry-ms N` is a no-op
+that expires into the same no-op. That is harmless, so it should be accepted
+rather than rejected. Likewise, `expiry-ms 0` is just "never expire", which is
+harmless.
 
-## Expiry Is Required For Safety
+## Prefer Finite Expiry For Safety
 
-Without expiry, a dead or wedged profiler could leave stale bias data in place.
-The bias should be refresh-based in production use: the controller keeps
-renewing it, and babeld falls back to unbiased scoring when renewal stops.
+Without finite expiry, a dead or wedged profiler could leave stale cost-control
+data in place. The command still accepts `expiry-ms 0` for explicit no-expiry
+state, but production controllers should normally use refresh-based finite
+timeouts: the controller keeps renewing them, and babeld falls back to neutral
+scoring when renewal stops.
 
 ## Local Socket Compatibility
 
@@ -59,8 +74,8 @@ response strings in the local/config command layer; lower layers should return
 typed results or domain objects.
 
 Use `cost` for the long-lived umbrella feature and API concept. Use
-`external-bias` for the MVP additive term. If future linear cost control lands,
-add separate coefficient/scale naming rather than renaming `external-bias`.
+`external-bias-256` for the additive fixed-point term and `external-coef-256`
+for the multiplicative fixed-point term.
 
 ## Match Local Organisation
 

@@ -2,65 +2,110 @@
 
 ## Motivation
 
-The goal is to let an external controller, such as a link profiler, add a local
-per-neighbour link cost bias without extending the Babel protocol. The command
-lives on babeld's local control socket. The resulting route metrics will later
-flow through normal Babel Updates.
+The goal is to let an external controller, such as a link profiler, apply local
+per-neighbour cost control without extending the Babel protocol. The command
+lives on babeld's local control socket. Peers only see the normal route metrics
+that result from local route selection.
 
 ## Terminology
 
-`neighbour-cost` is the stable cost-control command. "Cost control" is the
-umbrella concept: it covers any local external adjustment of babeld's native
+`neighbour-cost` is the stable cost-control command. "External cost control" is
+the umbrella concept: it covers local external adjustment of babeld's native
 per-neighbour link cost.
 
-The MVP exposes only the additive term, named `external-bias` in monitor output
-and docs:
+Stage 3 stabilizes the command and monitor schema for a fixed-point linear
+transform:
 
 ```text
-final_cost = babeld_existing_cost + external_bias + rtt_penalty
+raw_256 = coef_256 * babeld_native_base_cost
+        + bias_256
+        + 256 * rtt_penalty
+
+if raw_256 <= 256:
+    final_cost = 1
+else if raw_256 >= INFINITY * 256 - 128:
+    final_cost = INFINITY
+else:
+    final_cost = (raw_256 + 128) / 256
 ```
 
-In a future linear transform, that same bias remains the `B` term:
-
-```text
-final_cost = C * babeld_existing_cost + external_bias + rtt_penalty
-```
-
-So `_cost` in command/request naming is intentional at the umbrella API level,
-while `external-bias` is the precise name for the currently exposed parameter.
+`babeld_native_base_cost` means babeld's wired or ETX cost before RTT penalty.
+Liveness checks remain outside the transform: an unusable neighbour still has
+cost `INFINITY`. The Stage 5 implementation should use a wide signed integer
+for `raw_256`.
 
 ## Command
 
 ```text
-neighbour-cost <ifname> <link-local-neighbour> <bias> [expires-ms <milliseconds>]
+neighbour-cost <ifname> <link-local-neighbour> bias-256 <int> coef-256 <nat> expiry-ms <nat>
 ```
 
-The command name remains `neighbour-cost`, but the numeric argument is a
-non-negative bias added to babeld's native cost.
+The keyword order is fixed. Whitespace and trailing comments follow the existing
+configuration parser rules.
 
 Examples:
 
 ```text
-neighbour-cost en2 fe80::1234 160 expires-ms 30000
-neighbour-cost en2 fe80::1234 0
+neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256 expiry-ms 30000
+neighbour-cost en2 fe80::1234 bias-256 0 coef-256 128 expiry-ms 0
+neighbour-cost en2 fe80::1234 bias-256 0 coef-256 256 expiry-ms 0
 ```
 
-Bias `0` means clear the external bias. Non-zero values are added to babeld's
-native per-neighbour link cost.
-
-`expires-ms` is syntactically valid with any bias value, including `0`. An
-expiry of `0` is accepted and means immediate expiry in later stages.
-The value must be non-negative and must fit the existing `getint` parser; there
-is no separate upper-bound check after parsing.
-
-The planned final formula is:
+`bias-256` is the additive term, scaled by 256:
 
 ```text
-final_cost = babeld_existing_cost + external_bias + rtt_penalty
+bias-256 256    -> +1.0 cost
+bias-256 -128   -> -0.5 cost
+bias-256 40960  -> +160.0 cost
 ```
 
-The external bias does not replace `babeld_existing_cost`; it only makes the
-link less preferred by adding a non-negative penalty.
+For Stage 3, the accepted range is:
+
+```text
+-(65534 * 256) .. +(65534 * 256)
+```
+
+`coef-256` is the multiplicative term, scaled by 256:
+
+```text
+coef-256 0    -> 0.0x native base cost
+coef-256 128  -> 0.5x native base cost
+coef-256 256  -> 1.0x native base cost
+coef-256 512  -> 2.0x native base cost
+```
+
+For Stage 3, the accepted range is:
+
+```text
+0 .. 65535
+```
+
+That represents coefficients from `0.0` to roughly `255.996`.
+
+`expiry-ms` is mandatory. It is a relative millisecond timeout parsed as a
+natural integer. `expiry-ms 0` means no expiry is scheduled. `<int>` and
+`<nat>` use babeld's existing `getint()` parser; this is not a strict
+decimal-only grammar.
+
+The neutral command is:
+
+```text
+neighbour-cost en2 fe80::1234 bias-256 0 coef-256 256 expiry-ms 0
+```
+
+## Timing Model
+
+The command uses a relative millisecond timeout rather than a Unix timestamp.
+This matches babeld's existing scheduling model: babeld updates the global
+`now` from a monotonic `gettime()`, stores future deadlines as `struct timeval`
+values derived from `now`, and reports elapsed or remaining time with
+`timeval_minus_msec()`.
+
+Unix timestamps would use wall-clock time, which is the wrong default for this
+codebase. They would also require the external controller and babeld to agree on
+wall-clock time. A relative timeout can be consumed directly as
+`now + expiry_ms`; `0` can use the codebase's existing zero-time sentinel style
+for "no scheduled timeout".
 
 ## Response Model
 
@@ -70,13 +115,13 @@ This command follows the existing local socket model:
 - `bad`: malformed command syntax.
 - `no <reason>`: syntactically valid but not applicable.
 
-Stage 2 produces `ok`, `bad`, and semantic `no ...` responses, but does not yet
-store or apply any bias state.
+Stage 3 produces `ok`, `bad`, and semantic `no ...` responses, but does not yet
+store or apply any cost-control state.
 
 Internally, syntax parsing produces a request object. Semantic validation is a
-separate command-handler step in `configuration.c`. For Stage 2, semantic
-rejections return local-control `no ...` strings directly, matching nearby
-commands such as `flush interface`.
+separate command-handler step in `configuration.c`. For now, semantic rejections
+return local-control `no ...` strings directly, matching nearby commands such as
+`flush interface`.
 
 Current `no` cases:
 
@@ -84,12 +129,52 @@ Current `no` cases:
 - address is not link-local
 - no such neighbour on that interface
 
-## Monitor Output Target
+## Monitor Output
 
-Later stages should extend neighbour monitor lines with explicit external-bias
-state while keeping `cost` as the final effective link cost:
+Stage 3 extends neighbour monitor and dump lines with explicit external cost
+control state while keeping `cost` as the final effective link cost:
 
 ```text
-change neighbour ... rxcost 96 txcost 96 external-bias 160 external-bias-expiry-ms 24500 cost 256
-change neighbour ... rxcost 96 txcost 96 external-bias 0 external-bias-expiry-ms 0 cost 96
+change neighbour ... rxcost 96 txcost 96 external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost 96
 ```
+
+Until Stage 4 adds real per-neighbour state, the fixed-point fields report the
+neutral transform and no expiry:
+
+```text
+external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0
+```
+
+`external-cost-expiry-ms 0` has the same no-expiry meaning as command input
+`expiry-ms 0`.
+
+Neutral state with a positive expiry is valid:
+
+```text
+neighbour-cost en2 fe80::1234 bias-256 0 coef-256 256 expiry-ms 30000
+```
+
+In Stage 4, that should create visible neutral state with a scheduled expiry.
+It has no metric effect, but monitor output should show the remaining expiry
+until it expires back to neutral/no-expiry.
+
+## Stage 3 Transcript
+
+Stage 3 validates the full command grammar but still does not store or apply the
+transform:
+
+```text
+> neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256 expiry-ms 30000
+ok
+> dump
+add neighbour ... external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost ...
+```
+
+Stage 4 will connect the accepted request values to per-neighbour state.
+
+## Future Decimal Syntax
+
+A future local-control syntax may accept decimal terms, for example plain
+`bias` and `coef` keywords. If that happens, the fixed-point fields should remain
+available for compatibility or be replaced only through an explicit versioned
+compatibility plan.

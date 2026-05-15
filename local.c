@@ -156,7 +156,9 @@ local_notify_neighbour_1(struct local_socket *s,
     rc = snprintf(buf, 512,
                   "%s neighbour %lx address %s "
                   "if %s reach %04x ureach %04x "
-                  "rxcost %u txcost %u%s cost %u\n",
+                  "rxcost %u txcost %u%s "
+                  "external-bias-256 %d external-coef-256 %u "
+                  "external-cost-expiry-ms %u cost %u\n",
                   local_kind(kind),
                   /* Neighbours never move around in memory , so we can use the
                      address as a unique identifier. */
@@ -168,6 +170,9 @@ local_notify_neighbour_1(struct local_socket *s,
                   neighbour_rxcost(neigh),
                   neighbour_txcost(neigh),
                   rttbuf,
+                  neighbour_external_bias_256(neigh),
+                  neighbour_external_coef_256(neigh),
+                  neighbour_external_cost_expiry_msecs(neigh),
                   neighbour_cost(neigh));
 
     if(rc < 0 || rc >= 512)
