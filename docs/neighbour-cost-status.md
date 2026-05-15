@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 5 is implemented in babeld only.
+Stage 6 is implemented in babeld only.
 
 Implemented:
 
@@ -37,10 +37,8 @@ Implemented:
   update through the existing route path.
 - Expiry is out of scope. External cost control is set-and-forget and must be
   changed or reset explicitly by another local-control command.
-
-Not implemented yet:
-
-- Man page updates.
+- `babeld.man` documents the local-control command syntax, fixed-point
+  semantics, response behavior, monitor fields, and set-and-forget lifetime.
 
 Verification:
 

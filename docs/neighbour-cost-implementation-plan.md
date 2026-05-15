@@ -107,6 +107,8 @@ Status: done.
 
 ## Stage 6: Man Page
 
+Status: done.
+
 - Update `babeld.man`.
 - Document command syntax, bias/coefficient semantics, and response behavior.
 - Make clear this is a local control socket command, not a Babel wire protocol
