@@ -135,7 +135,18 @@ empty string.  The default is
 .BR /var/run/babeld.pid .
 .TP
 .IR interface ...
-The list of interfaces on which the protocol should operate.
+The list of interfaces on which the protocol should operate.  This list may be
+empty; in that case,
+.B babeld
+starts with no managed interfaces and interfaces may be added later through the
+local control socket with the
+.B interface
+command.  This requires a read-write local control socket, such as
+.BR \-G ,
+.BR local-port-readwrite ,
+or
+.BR local-path-readwrite ;
+without one, a daemon started with no interfaces is intentionally idle.
 .SH CONFIGURATION FILE FORMAT
 The configuration file is a sequence of lines each of which specifies
 a global option, an interface specification or a filtering

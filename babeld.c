@@ -399,7 +399,7 @@ main(int argc, char **argv)
             "               "
             "[-d level] [-D] [-L logfile] [-I pidfile]\n"
             "               "
-            "interface...\n",
+            "[interface...]\n",
             BABELD_VERSION);
     exit(1);
 
@@ -440,10 +440,8 @@ babel_main(char **interface_names, int num_interface_names)
             goto fail;
     }
 
-    if(interfaces == NULL) {
-        fprintf(stderr, "Eek... asked to run on no interfaces!\n");
-        goto fail;
-    }
+    if(interfaces == NULL)
+        debugf("Starting with no managed interfaces.\n");
 
     if(!have_id && !random_id) {
         /* We use all available interfaces here, since this increases the
