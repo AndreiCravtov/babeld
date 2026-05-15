@@ -76,8 +76,8 @@ Current parser validation:
   `-(65534 * 256)..+(65534 * 256)`.
 - `coef-256` is mandatory and must be followed by a non-negative integer in
   `0..65535`.
-- `<int>` and `<nat>` use base-0 integer syntax with explicit overflow and
-  range checks before narrowing.
+- `<int>` and `<nat>` use `strtol(..., base 0)` syntax with explicit overflow
+  and range checks before narrowing.
 
 Current semantic validation:
 
