@@ -112,8 +112,8 @@ This command follows the existing local socket model:
 - `no <reason>`: syntactically valid but not applicable.
 
 The current implementation produces `ok`, `bad`, and semantic `no ...`
-responses. Accepted commands store per-neighbour external cost-control state,
-but metric computation is unchanged until Stage 5.
+responses. Accepted commands store per-neighbour external cost-control state and
+immediately refresh route metrics that use that neighbour.
 
 Internally, syntax parsing returns values through local out-parameters. Semantic
 validation and mutation happen in the `neighbour-cost` command branch in
@@ -146,9 +146,10 @@ neighbour maintenance path can also emit neighbour monitor updates when no
 external-cost state changed, so monitor clients should treat neighbour lines as
 state snapshots rather than precise edge-triggered events.
 
-## Stage 4 Transcript
+## Stage 5 Transcript
 
-Stage 4 validates the full command grammar and stores the transform:
+Stage 5 validates the full command grammar, stores the transform, and uses it
+for route metric calculation:
 
 ```text
 > neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256
@@ -156,9 +157,6 @@ ok
 > dump
 add neighbour ... external-bias-256 40960 external-coef-256 256 cost ...
 ```
-
-Metric computation is unchanged until Stage 5, so `cost` remains babeld's
-native effective link cost.
 
 ## Future Decimal Syntax
 

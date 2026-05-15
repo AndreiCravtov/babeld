@@ -2,7 +2,7 @@
 
 ## Decimal Input
 
-Stage 3 uses explicit fixed-point integer keywords:
+The current command uses explicit fixed-point integer keywords:
 
 ```text
 bias-256 <int> coef-256 <nat>
@@ -59,7 +59,7 @@ else:
 
 ## Ranges
 
-Stage 3 parser ranges:
+Current parser ranges:
 
 ```text
 bias-256: -(65534 * 256) .. +(65534 * 256)
@@ -72,8 +72,8 @@ inverts babeld's native cost signal: worse native links would receive a larger
 reward. `coef-256 65535` is already roughly `255.996x`, which is far beyond
 practical use and will often saturate after clamping.
 
-Metric integration should use a wide signed integer for intermediate arithmetic
-and clamp only at the final output boundary.
+Metric integration uses a wide signed integer for intermediate arithmetic and
+clamps only at the final output boundary.
 
 ## Lifetime Model
 

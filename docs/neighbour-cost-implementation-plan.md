@@ -93,12 +93,17 @@ Status: done.
 
 ## Stage 5: Metric Integration
 
+Status: done.
+
 - Keep existing liveness checks first.
 - Compute the existing wired or ETX base cost.
 - Apply the fixed-point external transform.
 - Preserve RTT penalty handling.
-- Call `update_neighbour_metric()` when the effective cost changes.
+- Call `update_neighbour_metric()` when manual external cost-control state
+  changes, so routes through the neighbour are recalculated immediately.
 - Use the external cost accessors, not raw stored bias/coef fields.
+- Add targeted tests for neutral behavior, bias/coefficient behavior, clamp
+  thresholds, RTT penalty preservation, and liveness short-circuiting.
 
 ## Stage 6: Man Page
 

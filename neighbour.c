@@ -364,8 +364,25 @@ neighbour_external_cost_configure(struct neighbour *neigh, int bias_256,
     neigh->external_bias_256 = bias_256;
     neigh->external_coef_256 = coef_256;
 
-    local_notify_neighbour(neigh, LOCAL_CHANGE);
+    update_neighbour_metric(neigh, 1);
     return 1;
+}
+
+static unsigned
+apply_external_cost_transform(unsigned base_cost, unsigned rttcost,
+                              int bias_256, unsigned coef_256)
+{
+    long long raw;
+
+    raw = (long long)coef_256 * base_cost +
+          bias_256 + 256LL * rttcost;
+
+    if(raw <= 256)
+        return 1;
+    if(raw >= (long long)INFINITY * 256 - 128)
+        return INFINITY;
+
+    return (raw + 128) / 256;
 }
 
 unsigned
@@ -398,9 +415,9 @@ neighbour_cost(struct neighbour *neigh)
         cost = (a * b + 128) >> 8;
     }
 
-    cost += neighbour_rttcost(neigh);
-
-    return MIN(cost, INFINITY);
+    return apply_external_cost_transform(cost, neighbour_rttcost(neigh),
+                                         neighbour_external_bias_256(neigh),
+                                         neighbour_external_coef_256(neigh));
 }
 
 int

@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 4 is implemented in babeld only.
+Stage 5 is implemented in babeld only.
 
 Implemented:
 
@@ -28,14 +28,18 @@ Implemented:
   `bias-256 0`, `coef-256 256`.
 - `neighbour_external_cost_configure()` stores bias and coefficient state on
   the neighbour.
-- Neighbour monitors receive `change neighbour` notifications when visible
-  external cost-control state changes.
+- `neighbour_cost()` applies the fixed-point external transform to babeld's
+  native wired or ETX base cost.
+- RTT penalty is preserved outside the external coefficient.
+- Liveness checks still short-circuit to `INFINITY` before the transform.
+- Manual external cost-control changes call `update_neighbour_metric()`, which
+  recalculates routes through the neighbour and emits the neighbour monitor
+  update through the existing route path.
 - Expiry is out of scope. External cost control is set-and-forget and must be
   changed or reset explicitly by another local-control command.
 
 Not implemented yet:
 
-- Metric recomputation.
 - Man page updates.
 
 Verification:
@@ -84,7 +88,7 @@ change neighbour ... rxcost 96 txcost 96 external-bias-256 0 external-coef-256 2
 The fields report the stored per-neighbour transform. With no expiry path, these
 values remain until replaced, reset to neutral, or removed with the neighbour.
 
-## Planned Semantics
+## Metric Semantics
 
 ```text
 raw_256 = coef_256 * babeld_native_base_cost
@@ -100,12 +104,13 @@ else:
 ```
 
 Liveness checks remain outside the transform: an unusable neighbour still has
-cost `INFINITY`. Metric integration should compute `raw_256` in a wide signed
-integer.
+cost `INFINITY`. Metric integration computes `raw_256` in a wide signed integer
+and clamps once at the final output boundary.
 
-## Stage 4 Transcript
+## Stage 5 Transcript
 
-Stage 4 accepts the full schema and stores the transform on the neighbour:
+Stage 5 accepts the full schema, stores the transform on the neighbour, and
+uses it for route metric calculation:
 
 ```text
 > neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256
