@@ -26,9 +26,7 @@ If compiling for OpenWRT, you will probably want to say something like
 
     $ make CC=mipsel-linux-gcc PLATFORM_DEFINES='-march=mips32'
 
-On Mac OS X, you'll need to do
-
-    $ make LDLIBS=''
+On Mac OS X, the default Makefile should build without overriding `LDLIBS`.
 
 
 Setting up a network for use with Babel
