@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 6 is implemented in babeld only.
+Stage 7 is implemented in babeld only.
 
 Implemented:
 
@@ -39,11 +39,18 @@ Implemented:
   changed or reset explicitly by another local-control command.
 - `babeld.man` documents the local-control command syntax, fixed-point
   semantics, response behavior, monitor fields, and set-and-forget lifetime.
+- Two-node manual verification completed on `e4:en3` and `e2:en2`; see
+  `docs/neighbour-cost-lab-workflow.md`.
 
 Verification:
 
 - `nix develop -c make` passes with `-Wall`.
 - `nix develop -c make test` passes after cleaning stale non-test objects.
+- Remote macOS build passes with plain `nix develop -c make`; the Makefile
+  omits `-lrt` on Darwin.
+- Stage 7 local-control transcript verifies `ok`, `bad`, all semantic
+  `no ...` responses, dump fields, monitor events, route metric changes, and
+  neutral reset.
 
 ## Command Grammar
 
@@ -105,9 +112,9 @@ Liveness checks remain outside the transform: an unusable neighbour still has
 cost `INFINITY`. Metric integration computes `raw_256` in a wide signed integer
 and clamps once at the final output boundary.
 
-## Stage 5 Transcript
+## Example Transcript
 
-Stage 5 accepts the full schema, stores the transform on the neighbour, and
+The command accepts the full schema, stores the transform on the neighbour, and
 uses it for route metric calculation:
 
 ```text

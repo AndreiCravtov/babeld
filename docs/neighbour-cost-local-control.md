@@ -146,9 +146,9 @@ neighbour maintenance path can also emit neighbour monitor updates when no
 external-cost state changed, so monitor clients should treat neighbour lines as
 state snapshots rather than precise edge-triggered events.
 
-## Stage 5 Transcript
+## Example Transcript
 
-Stage 5 validates the full command grammar, stores the transform, and uses it
+The command validates the full grammar, stores the transform, and uses it
 for route metric calculation:
 
 ```text

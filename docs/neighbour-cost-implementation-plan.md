@@ -118,9 +118,12 @@ Status: done.
 
 ## Stage 7: Manual Verification
 
+Status: done.
+
 - Add local socket transcript examples.
 - Verify accepted commands, rejected commands, monitor events, route metric
   changes, and explicit neutral reset.
+- Record the two-node workflow in `docs/neighbour-cost-lab-workflow.md`.
 
 ## Future Direction: Decimal Transform
 
