@@ -47,18 +47,16 @@ local control surface should enforce invariants that matter for correctness and
 clear parsing, but avoid policy restrictions that make clients more brittle.
 
 For example, the neutral command
-`neighbour-cost IFNAME ADDR bias-256 0 coef-256 256 expiry-ms N` is a no-op
-that expires into the same no-op. That is harmless, so it should be accepted
-rather than rejected. Likewise, `expiry-ms 0` is just "never expire", which is
-harmless.
+`neighbour-cost IFNAME ADDR bias-256 0 coef-256 256` is a no-op and an
+explicit reset. That is harmless, so it should be accepted rather than rejected.
 
-## Prefer Finite Expiry For Safety
+## No Expiry In Babeld
 
-Without finite expiry, a dead or wedged profiler could leave stale cost-control
-data in place. The command still accepts `expiry-ms 0` for explicit no-expiry
-state, but production controllers should normally use refresh-based finite
-timeouts: the controller keeps renewing them, and babeld falls back to neutral
-scoring when renewal stops.
+External cost control is intentionally set-and-forget. A dead or wedged
+profiler can leave stale cost-control data in place, so production controllers
+that require freshness must send explicit neutral reset commands when their own
+policy decides the data is stale. Do not add hidden expiry semantics back into
+babeld without a separate design pass.
 
 ## Local Socket Compatibility
 

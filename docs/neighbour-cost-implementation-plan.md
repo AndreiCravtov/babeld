@@ -21,29 +21,27 @@ response handling, parser out-parameter style, ownership conventions, and where
 temporary or durable structs live.
 
 - Add interface and non-creating neighbour lookup helpers.
-- Add a command-handler validation/application function in `configuration.c`.
+- Add command-handler validation/application logic in `configuration.c`.
 - Validate interface existence.
 - Validate IPv6 link-local address.
 - Validate neighbour existence on that interface.
-- Require `bias-256 <int> coef-256 <nat> expiry-ms <nat>` in the
-  command grammar.
-- Treat `expiry-ms 0` as explicit no-expiry state.
+- Require `bias-256 <int> coef-256 <nat>` in the command grammar.
 - Return `no <reason>` for semantic failures.
 - Keep metric behavior unchanged.
 - Parser returns the parsed values through out-parameters, matching the simpler
   fixed-schema parser helper style in `configuration.c`.
 - Validation and application are handled in the `neighbour-cost` command branch.
-- Validation returns local-control response strings directly in `configuration.c`,
-  matching nearby command handling such as `flush interface`.
-- Interface and neighbour layers expose lookup helpers, not local-control response logic.
+- Validation returns local-control response strings directly in
+  `configuration.c`, matching nearby command handling such as `flush interface`.
+- Interface and neighbour layers expose lookup helpers, not local-control
+  response logic.
 
 Architecture note: `configuration.c` is an acceptable temporary home for the
 local-control parser and Stage 2 validation stub, because this command currently
 enters through `parse_config_line`. Later stages should avoid making
-`configuration.c` the long-term owner of neighbour cost behavior. Once real
-state, notifications, metric updates, and expiry exist, keep the parser in the
-local-control/config layer but move neighbour-domain mutation behind a neighbour
-or cost-control API.
+`configuration.c` the long-term owner of neighbour cost behavior. Keep the
+parser in the local-control/config layer but move durable neighbour-domain
+mutation behind a neighbour or cost-control API.
 
 Struct-placement note: existing parsed compound objects are generally durable
 objects declared outside `configuration.c`, such as `struct filter` in
@@ -65,34 +63,38 @@ should reflect the stable external cost-control abstraction. Stage 4 uses
 Status: done.
 
 - Stabilise the keyworded command grammar:
-  `bias-256 <int> coef-256 <nat> expiry-ms <nat>`.
+  `bias-256 <int> coef-256 <nat>`.
 - Add neighbour monitor/dump fields for external cost-control state.
-- Initially report
-  `external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0`.
-- Add accessors such as `neighbour_external_bias_256()`,
-  `neighbour_external_coef_256()`, and
-  `neighbour_external_cost_expiry_msecs()`; `local.c` should not reach into
-  future state directly.
+- Initially report `external-bias-256 0 external-coef-256 256`.
+- Add neighbour-layer accessors such as `neighbour_external_bias_256()` and
+  `neighbour_external_coef_256()`; `local.c` should not reach into neighbour
+  state directly.
 - Update downstream parsers against this stable line shape.
 
 ## Stage 4: Per-Neighbour State
 
 Status: done.
 
-- Add `external_bias_256`, `external_coef_256`, and
-  `external_cost_deadline` to `struct neighbour`.
-- Add helpers to read external cost-control state and remaining expiry time.
+- Add `external_bias_256` and `external_coef_256` to `struct neighbour`.
+- Add helpers to read external cost-control state.
 - Add a real cost-control mutator,
   `neighbour_external_cost_configure(...)`.
-- Make the mutator store and clear the fixed-point transform.
-- Store positive `expiry-ms` values as monotonic `now + expiry_ms` deadlines;
-  store `0` as no expiry.
-- Preserve visible neutral state with positive expiry rather than collapsing it:
-  `bias-256 0 coef-256 256 expiry-ms N` should report a neutral transform with
-  a remaining expiry until Stage 6 clears expired state back to
-  neutral/no-expiry.
-- Emit neighbour notifications when visible cost-control state changes, even before
-  metric integration exists.
+- Make the mutator store the fixed-point transform.
+- Emit neighbour notifications when visible cost-control state changes, even
+  before metric integration exists.
+
+## Stage 4.5: Remove Expiry
+
+Status: done.
+
+- Remove `expiry-ms` from the command grammar.
+- Remove per-neighbour deadline state and monitor expiry fields.
+- Remove external-cost expiry scheduling from neighbour maintenance.
+- Restore external cost control to a simple set-and-forget model: to change the
+  transform, send another `neighbour-cost` command; to reset it, send the
+  neutral `bias-256 0 coef-256 256` transform.
+- Keep the historical `check_neighbours()` / `babeld.c` scheduling contract
+  untouched by this feature.
 
 ## Stage 5: Metric Integration
 
@@ -101,25 +103,22 @@ Status: done.
 - Apply the fixed-point external transform.
 - Preserve RTT penalty handling.
 - Call `update_neighbour_metric()` when the effective cost changes.
+- Use the external cost accessors, not raw stored bias/coef fields.
 
-## Stage 6: Expiry
-
-- Schedule neighbour checks for expiring external cost-control state.
-- Clear expired positive-timeout external cost-control state in
-  `check_neighbours()`.
-- Emit neighbour change events through existing update paths.
-- Include the next external-cost expiry in the returned check interval.
-
-## Stage 7: Man Page
+## Stage 6: Man Page
 
 - Update `babeld.man`.
-- Document command syntax, bias semantics, response behavior, and expiry.
-- Make clear this is a local control socket command, not a Babel wire protocol extension.
+- Document command syntax, bias/coefficient semantics, and response behavior.
+- Make clear this is a local control socket command, not a Babel wire protocol
+  extension.
+- Document that there is no expiry; controllers must reset stale values
+  explicitly.
 
-## Stage 8: Manual Verification
+## Stage 7: Manual Verification
 
 - Add local socket transcript examples.
-- Verify accepted commands, rejected commands, monitor events, route metric changes, and expiry fallback.
+- Verify accepted commands, rejected commands, monitor events, route metric
+  changes, and explicit neutral reset.
 
 ## Future Direction: Decimal Transform
 

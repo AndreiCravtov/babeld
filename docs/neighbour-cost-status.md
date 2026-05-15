@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 4 is implemented in babeld only.
+Stage 4.5 is implemented in babeld only.
 
 Implemented:
 
@@ -13,27 +13,29 @@ Implemented:
 - Invalid command syntax returns `bad`.
 - Semantic validation failures return `no <reason>`.
 - Accepted commands store per-neighbour external cost-control state.
-- Implemented semantic validation for interface existence, link-local address, and existing neighbour lookup.
+- Implemented semantic validation for interface existence, link-local address,
+  and existing neighbour lookup.
 - Parsing returns values through out-parameters before validation/application,
   avoiding a one-off request struct and matching the local fixed-schema parser
   style.
-- Semantic validation returns local-control response strings directly in `configuration.c`, matching nearby command handling such as `flush interface`.
-- `interface.c` exposes interface lookup, and `neighbour.c` exposes non-creating neighbour lookup; no validation-only setter is exported.
-- Neighbour monitor/dump output includes `external-bias-256`,
-  `external-coef-256`, and `external-cost-expiry-ms` fields.
+- Semantic validation returns local-control response strings directly in
+  `configuration.c`, matching nearby command handling such as `flush interface`.
+- `interface.c` exposes interface lookup, and `neighbour.c` exposes
+  non-creating neighbour lookup; no validation-only setter is exported.
+- Neighbour monitor/dump output includes `external-bias-256` and
+  `external-coef-256` fields.
 - New neighbours initialise to the neutral transform:
-  `bias-256 0`, `coef-256 256`, `expiry-ms 0`.
-- `neighbour_external_cost_configure()` stores bias, coefficient, and expiry
-  deadline state on the neighbour.
-- Positive `expiry-ms` values are stored as monotonic `now + expiry_ms`
-  deadlines; `expiry-ms 0` is stored as no expiry.
+  `bias-256 0`, `coef-256 256`.
+- `neighbour_external_cost_configure()` stores bias and coefficient state on
+  the neighbour.
 - Neighbour monitors receive `change neighbour` notifications when visible
   external cost-control state changes.
+- Expiry was removed in Stage 4.5. External cost control is set-and-forget and
+  must be changed or reset explicitly by another local-control command.
 
 Not implemented yet:
 
 - Metric recomputation.
-- Active expiry clearing and expiry-driven notifications.
 - Man page updates.
 
 Verification:
@@ -44,7 +46,7 @@ Verification:
 ## Command Grammar
 
 ```text
-neighbour-cost <ifname> <ipv6-address> bias-256 <int> coef-256 <nat> expiry-ms <nat>
+neighbour-cost <ifname> <ipv6-address> bias-256 <int> coef-256 <nat>
 ```
 
 Current parser validation:
@@ -55,10 +57,6 @@ Current parser validation:
   `-(65534 * 256)..+(65534 * 256)`.
 - `coef-256` is mandatory and must be followed by a non-negative integer in
   `0..65535`.
-- `expiry-ms` is mandatory and must be followed by a non-negative integer
-  accepted by the existing `getint` parser.
-- `expiry-ms 0` means no expiry is scheduled. Positive values are relative
-  millisecond timeouts.
 - `<int>` and `<nat>` inherit the existing `getint()` base-0 syntax; they are
   not documented as strict decimal-only values.
 
@@ -80,13 +78,11 @@ Neighbour local-control lines now include schema-stable external cost-control
 fields:
 
 ```text
-change neighbour ... rxcost 96 txcost 96 external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost 96
+change neighbour ... rxcost 96 txcost 96 external-bias-256 0 external-coef-256 256 cost 96
 ```
 
-The fields report the stored per-neighbour transform. Positive-expiry state
-reports a remaining millisecond timeout. Expiry clearing is still Stage 6, so a
-stored deadline that has already passed can report `external-cost-expiry-ms 0`
-until Stage 6 clears the state.
+The fields report the stored per-neighbour transform. With no expiry path, these
+values remain until replaced, reset to neutral, or removed with the neighbour.
 
 ## Planned Semantics
 
@@ -107,13 +103,13 @@ Liveness checks remain outside the transform: an unusable neighbour still has
 cost `INFINITY`. Metric integration should compute `raw_256` in a wide signed
 integer.
 
-## Stage 4 Transcript
+## Stage 4.5 Transcript
 
-Stage 4 accepts the full schema and stores the transform on the neighbour:
+Stage 4.5 accepts the full schema and stores the transform on the neighbour:
 
 ```text
-> neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256 expiry-ms 30000
+> neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256
 ok
 > dump
-add neighbour ... external-bias-256 40960 external-coef-256 256 external-cost-expiry-ms 29998 cost ...
+add neighbour ... external-bias-256 40960 external-coef-256 256 cost ...
 ```

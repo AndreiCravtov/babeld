@@ -64,7 +64,6 @@ Stage 3 parser ranges:
 ```text
 bias-256: -(65534 * 256) .. +(65534 * 256)
 coef-256: 0 .. 65535
-expiry-ms: 0 .. parser maximum
 ```
 
 `bias-256` is larger than `coef-256` because it is measured in cost units, not
@@ -76,20 +75,13 @@ practical use and will often saturate after clamping.
 Metric integration should use a wide signed integer for intermediate arithmetic
 and clamp only at the final output boundary.
 
-## Expiry Representation
+## Lifetime Model
 
-Keep the local-control input as a relative millisecond timeout:
+Current external cost control is set-and-forget. babeld stores a transform until
+another `neighbour-cost` command replaces it, a neutral command resets it, or
+the neighbour is flushed.
 
-```text
-expiry-ms <milliseconds>
-```
-
-Do not switch to Unix timestamps. babeld's internal `gettime()` is monotonic
-when possible, and most internal scheduling stores deadlines as `struct timeval`
-values computed from the current monotonic `now`. A Unix timestamp would be a
-wall-clock value, would be vulnerable to clock changes or clock skew between the
-controller and babeld, and would still need conversion into babeld's monotonic
-deadline model.
-
-Stage 4 converts positive `expiry-ms` values into `now + expiry_ms`.
-`expiry-ms 0` means no expiry and can be represented by a zero deadline.
+If timeout-based control is reconsidered later, it should be treated as a new
+design rather than a small parser tweak. The previous expiry design created
+unwanted coupling to neighbour maintenance scheduling, monitor semantics, and
+metric freshness.

@@ -113,8 +113,7 @@ find_neighbour(const unsigned char *address, struct interface *ifp)
     neigh->challenge_request_limitation = zero;
     neigh->challenge_reply_limitation = zero;
     neigh->external_bias_256 = 0;
-    neigh->external_coef_256 = 256; // fixed-point 1.0 is 256
-    neigh->external_cost_deadline = zero;
+    neigh->external_coef_256 = 256; /* fixed-point 1.0 */
     neigh->ifp = ifp;
     neigh->buf.buf = buf;
     neigh->buf.size = ifp->buf.size;
@@ -349,37 +348,21 @@ neighbour_external_coef_256(struct neighbour *neigh)
     return neigh->external_coef_256;
 }
 
-unsigned
-neighbour_external_cost_expiry_msecs(struct neighbour *neigh)
-{
-    if(neigh->external_cost_deadline.tv_sec == 0 &&
-       neigh->external_cost_deadline.tv_usec == 0)
-        return 0;
-
-    return timeval_minus_msec(&neigh->external_cost_deadline, &now);
-}
-
 int
 neighbour_external_cost_configure(struct neighbour *neigh, int bias_256,
-                                  unsigned coef_256, unsigned expiry_msecs)
+                                  unsigned coef_256)
 {
-    struct timeval deadline = {0, 0};
     int changed;
-
-    if(expiry_msecs > 0)
-        timeval_add_msec(&deadline, &now, expiry_msecs);
 
     changed =
         neigh->external_bias_256 != bias_256 ||
-        neigh->external_coef_256 != coef_256 ||
-        timeval_compare(&neigh->external_cost_deadline, &deadline) != 0;
+        neigh->external_coef_256 != coef_256;
 
     if(!changed)
         return 0;
 
     neigh->external_bias_256 = bias_256;
     neigh->external_coef_256 = coef_256;
-    neigh->external_cost_deadline = deadline;
 
     local_notify_neighbour(neigh, LOCAL_CHANGE);
     return 1;

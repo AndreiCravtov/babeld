@@ -362,8 +362,7 @@ parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
                              char **ifname_return,
                              unsigned char *address_return,
                              int *bias_256_return,
-                             unsigned *coef_256_return,
-                             unsigned *expiry_msecs_return)
+                             unsigned *coef_256_return)
 {
     const int max_bias_256 = (INFINITY - 1) * 256;
     const int max_coef_256 = 65535;
@@ -371,7 +370,7 @@ parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
     char *ifname = NULL, *token = NULL;
     unsigned char *address = NULL;
     unsigned char address_buf[16];
-    int af, bias_256 = 0, coef_256 = 0, expiry_msecs = 0;
+    int af, bias_256 = 0, coef_256 = 0;
 
     c = getword(c, &ifname, gnc, closure);
     if(c < -1)
@@ -408,16 +407,6 @@ parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
        coef_256 > max_coef_256)
         goto fail;
 
-    c = getword(c, &token, gnc, closure);
-    if(c < -1 || strcmp(token, "expiry-ms") != 0)
-        goto fail;
-    free(token);
-    token = NULL;
-
-    c = getint(c, &expiry_msecs, gnc, closure);
-    if(c < -1 || expiry_msecs < 0)
-        goto fail;
-
     c = skip_eol(c, gnc, closure);
     if(c < -1)
         goto fail;
@@ -426,7 +415,6 @@ parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
     memcpy(address_return, address_buf, 16);
     *bias_256_return = bias_256;
     *coef_256_return = coef_256;
-    *expiry_msecs_return = expiry_msecs;
     return c;
 
  fail:
@@ -1332,14 +1320,14 @@ parse_config_line(int c, gnc_t gnc, void *closure,
         char *ifname = NULL;
         unsigned char address[16];
         int bias_256;
-        unsigned coef_256, expiry_msecs;
+        unsigned coef_256;
         struct interface *ifp;
         struct neighbour *neigh = NULL;
         const char *message = NULL;
         if(!config_finalised)
             goto fail;
         c = parse_neighbour_cost_command(c, gnc, closure, &ifname, address,
-                                         &bias_256, &coef_256, &expiry_msecs);
+                                         &bias_256, &coef_256);
         if(c < -1)
             goto fail;
 
@@ -1360,8 +1348,7 @@ parse_config_line(int c, gnc_t gnc, void *closure,
             if(message_return)
                 *message_return = message;
         } else {
-            neighbour_external_cost_configure(neigh, bias_256, coef_256,
-                                              expiry_msecs);
+            neighbour_external_cost_configure(neigh, bias_256, coef_256);
         }
 
         free(ifname);
