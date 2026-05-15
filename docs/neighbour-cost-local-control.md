@@ -118,10 +118,10 @@ This command follows the existing local socket model:
 Stage 3 produces `ok`, `bad`, and semantic `no ...` responses, but does not yet
 store or apply any cost-control state.
 
-Internally, syntax parsing produces a request object. Semantic validation is a
-separate command-handler step in `configuration.c`. For now, semantic rejections
-return local-control `no ...` strings directly, matching nearby commands such as
-`flush interface`.
+Internally, syntax parsing returns values through local out-parameters. Semantic
+validation and mutation happen in the `neighbour-cost` command branch in
+`configuration.c`. For now, semantic rejections return local-control `no ...`
+strings directly, matching nearby commands such as `flush interface`.
 
 Current `no` cases:
 
@@ -131,15 +131,14 @@ Current `no` cases:
 
 ## Monitor Output
 
-Stage 3 extends neighbour monitor and dump lines with explicit external cost
-control state while keeping `cost` as the final effective link cost:
+Neighbour monitor and dump lines include explicit external cost-control state
+while keeping `cost` as the final effective link cost:
 
 ```text
 change neighbour ... rxcost 96 txcost 96 external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost 96
 ```
 
-Until Stage 4 adds real per-neighbour state, the fixed-point fields report the
-neutral transform and no expiry:
+New neighbours report the neutral transform and no expiry:
 
 ```text
 external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0
@@ -154,23 +153,27 @@ Neutral state with a positive expiry is valid:
 neighbour-cost en2 fe80::1234 bias-256 0 coef-256 256 expiry-ms 30000
 ```
 
-In Stage 4, that should create visible neutral state with a scheduled expiry.
-It has no metric effect, but monitor output should show the remaining expiry
-until it expires back to neutral/no-expiry.
+In Stage 4, that creates visible neutral state with a scheduled expiry. It has
+no metric effect, but monitor output shows the remaining expiry until active
+expiry clearing is implemented in Stage 6.
 
-## Stage 3 Transcript
+Stage 4 stores positive `expiry-ms` values as monotonic deadlines and reports
+the remaining timeout. It does not yet clear expired state; before Stage 6, a
+stored deadline that has already passed can report `external-cost-expiry-ms 0`.
 
-Stage 3 validates the full command grammar but still does not store or apply the
-transform:
+## Stage 4 Transcript
+
+Stage 4 validates the full command grammar and stores the transform:
 
 ```text
 > neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256 expiry-ms 30000
 ok
 > dump
-add neighbour ... external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost ...
+add neighbour ... external-bias-256 40960 external-coef-256 256 external-cost-expiry-ms 29998 cost ...
 ```
 
-Stage 4 will connect the accepted request values to per-neighbour state.
+Metric computation is unchanged until Stage 5, so `cost` remains babeld's
+native effective link cost.
 
 ## Future Decimal Syntax
 

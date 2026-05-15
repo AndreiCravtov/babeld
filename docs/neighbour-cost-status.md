@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 3 is implemented in babeld only.
+Stage 4 is implemented in babeld only.
 
 Implemented:
 
@@ -12,22 +12,28 @@ Implemented:
 - Valid command syntax and semantics return `ok`.
 - Invalid command syntax returns `bad`.
 - Semantic validation failures return `no <reason>`.
-- The command is still a no-op after validation: it does not store state, change metrics, or emit neighbour updates.
+- Accepted commands store per-neighbour external cost-control state.
 - Implemented semantic validation for interface existence, link-local address, and existing neighbour lookup.
-- Parsing now produces a heap-allocated local request object before validation/application, matching the compound-object parser style in `configuration.c`.
+- Parsing returns values through out-parameters before validation/application,
+  avoiding a one-off request struct and matching the local fixed-schema parser
+  style.
 - Semantic validation returns local-control response strings directly in `configuration.c`, matching nearby command handling such as `flush interface`.
 - `interface.c` exposes interface lookup, and `neighbour.c` exposes non-creating neighbour lookup; no validation-only setter is exported.
 - Neighbour monitor/dump output includes `external-bias-256`,
   `external-coef-256`, and `external-cost-expiry-ms` fields.
-- Stage 3 accessors return the neutral transform until real per-neighbour state
-  is added: `bias-256 0`, `coef-256 256`, `expiry-ms 0`.
+- New neighbours initialise to the neutral transform:
+  `bias-256 0`, `coef-256 256`, `expiry-ms 0`.
+- `neighbour_external_cost_configure()` stores bias, coefficient, and expiry
+  deadline state on the neighbour.
+- Positive `expiry-ms` values are stored as monotonic `now + expiry_ms`
+  deadlines; `expiry-ms 0` is stored as no expiry.
+- Neighbour monitors receive `change neighbour` notifications when visible
+  external cost-control state changes.
 
 Not implemented yet:
 
-- Per-neighbour external cost-control state.
-- A real cost-control mutator.
 - Metric recomputation.
-- Expiry handling.
+- Active expiry clearing and expiry-driven notifications.
 - Man page updates.
 
 Verification:
@@ -77,8 +83,10 @@ fields:
 change neighbour ... rxcost 96 txcost 96 external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost 96
 ```
 
-Stage 3 always reports the neutral transform and no expiry. Stage 4 will connect
-these fields to real per-neighbour state.
+The fields report the stored per-neighbour transform. Positive-expiry state
+reports a remaining millisecond timeout. Expiry clearing is still Stage 6, so a
+stored deadline that has already passed can report `external-cost-expiry-ms 0`
+until Stage 6 clears the state.
 
 ## Planned Semantics
 
@@ -99,14 +107,13 @@ Liveness checks remain outside the transform: an unusable neighbour still has
 cost `INFINITY`. Metric integration should compute `raw_256` in a wide signed
 integer.
 
-## Stage 3 Transcript
+## Stage 4 Transcript
 
-Stage 3 accepts the full schema but still reports neutral monitor state because
-per-neighbour storage is not implemented yet:
+Stage 4 accepts the full schema and stores the transform on the neighbour:
 
 ```text
 > neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256 expiry-ms 30000
 ok
 > dump
-add neighbour ... external-bias-256 0 external-coef-256 256 external-cost-expiry-ms 0 cost ...
+add neighbour ... external-bias-256 40960 external-coef-256 256 external-cost-expiry-ms 29998 cost ...
 ```

@@ -48,13 +48,6 @@ static struct filter *output_filters = NULL;
 static struct filter *redistribute_filters = NULL;
 static struct filter *install_filters = NULL;
 
-struct neighbour_cost_request {
-    char *ifname;
-    unsigned char address[16];
-    int bias_256;
-    unsigned coef_256;
-    unsigned expiry_msecs;
-};
 struct interface_conf *default_interface_conf = NULL;
 static struct interface_conf *interface_confs = NULL;
 
@@ -364,129 +357,83 @@ gethex(int c, unsigned char **value_r, int *len_r, gnc_t gnc, void *closure)
     return c;
 }
 
-static void
-free_neighbour_cost_request(struct neighbour_cost_request *request)
-{
-    if(request == NULL)
-        return;
-    free(request->ifname);
-    free(request);
-}
-
 static int
 parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
-                             struct neighbour_cost_request **request_return)
+                             char **ifname_return,
+                             unsigned char *address_return,
+                             int *bias_256_return,
+                             unsigned *coef_256_return,
+                             unsigned *expiry_msecs_return)
 {
-    // consts
     const int max_bias_256 = (INFINITY - 1) * 256;
     const int max_coef_256 = 65535;
 
-    // decls
     char *ifname = NULL, *token = NULL;
     unsigned char *address = NULL;
+    unsigned char address_buf[16];
     int af, bias_256 = 0, coef_256 = 0, expiry_msecs = 0;
 
-    struct neighbour_cost_request *request = calloc(1, sizeof(struct neighbour_cost_request));
-    if(request == NULL)
-        return -2;
-
-    // parse interface name
     c = getword(c, &ifname, gnc, closure);
     if(c < -1)
         goto fail;
 
-    // parse IPv6 address
     c = getip(c, &address, &af, gnc, closure);
     if(c < -1 || af != AF_INET6)
         goto fail;
-    memcpy(request->address, address, 16);
+    memcpy(address_buf, address, 16);
     free(address);
     address = NULL;
 
-    // parse "bias-256" token
     c = getword(c, &token, gnc, closure);
     if(c < -1 || strcmp(token, "bias-256") != 0)
         goto fail;
     free(token);
     token = NULL;
 
-    // parse bias fixed-point decimal (within range)
     c = getint(c, &bias_256, gnc, closure);
     if(c < -1 ||
        bias_256 < -max_bias_256 ||
        bias_256 > max_bias_256)
         goto fail;
-    request->bias_256 = bias_256;
 
-    // parse "coef-256" token
     c = getword(c, &token, gnc, closure);
     if(c < -1 || strcmp(token, "coef-256") != 0)
         goto fail;
     free(token);
     token = NULL;
 
-    // parse coefficient fixed-point positive decimal
     c = getint(c, &coef_256, gnc, closure);
     if(c < -1 ||
        coef_256 < 0 ||
        coef_256 > max_coef_256)
         goto fail;
-    request->coef_256 = coef_256;
 
-    // parse "expiry-ms" token
     c = getword(c, &token, gnc, closure);
     if(c < -1 || strcmp(token, "expiry-ms") != 0)
         goto fail;
     free(token);
     token = NULL;
 
-    // parse expiry milliseconds natural number
     c = getint(c, &expiry_msecs, gnc, closure);
     if(c < -1 || expiry_msecs < 0)
         goto fail;
-    request->expiry_msecs = expiry_msecs;
 
-    // parse whitespace/comments until EOL
     c = skip_eol(c, gnc, closure);
     if(c < -1)
         goto fail;
 
-    request->ifname = ifname;
-    *request_return = request;
+    *ifname_return = ifname;
+    memcpy(address_return, address_buf, 16);
+    *bias_256_return = bias_256;
+    *coef_256_return = coef_256;
+    *expiry_msecs_return = expiry_msecs;
     return c;
 
  fail:
     free(token);
     free(address);
     free(ifname);
-    free_neighbour_cost_request(request);
     return -2;
-}
-
-static const char *
-apply_neighbour_cost_request(const struct neighbour_cost_request *request)
-{
-    struct interface *ifp;
-    struct neighbour *neigh;
-
-    ifp = find_interface(request->ifname);
-    if(ifp == NULL)
-        return "No such interface";
-
-    if(!linklocal(request->address))
-        return "Address is not link-local";
-
-    neigh = find_neighbour_nocreate(request->address, ifp);
-    if(neigh == NULL)
-        return "No such neighbour";
-
-    /* Stage 3 only validates the local socket command; later stages apply it. */
-    (void)neigh;
-    (void)request->bias_256;
-    (void)request->coef_256;
-    (void)request->expiry_msecs;
-
-    return NULL;
 }
 
 static void
@@ -1382,21 +1329,42 @@ parse_config_line(int c, gnc_t gnc, void *closure,
             goto fail;
         }
     } else if(strcmp(token, "neighbour-cost") == 0) {
-        struct neighbour_cost_request *request;
-        const char *message;
+        char *ifname = NULL;
+        unsigned char address[16];
+        int bias_256;
+        unsigned coef_256, expiry_msecs;
+        struct interface *ifp;
+        struct neighbour *neigh = NULL;
+        const char *message = NULL;
         if(!config_finalised)
             goto fail;
-        c = parse_neighbour_cost_command(c, gnc, closure, &request);
+        c = parse_neighbour_cost_command(c, gnc, closure, &ifname, address,
+                                         &bias_256, &coef_256, &expiry_msecs);
         if(c < -1)
             goto fail;
-        message = apply_neighbour_cost_request(request);
+
+        ifp = find_interface(ifname);
+        if(ifp == NULL) {
+            message = "No such interface";
+        } else if(!linklocal(address)) {
+            message = "Address is not link-local";
+        } else {
+            neigh = find_neighbour_nocreate(address, ifp);
+            if(neigh == NULL)
+                message = "No such neighbour";
+        }
+
         if(message != NULL) {
             if(action_return)
                 *action_return = CONFIG_ACTION_NO;
             if(message_return)
                 *message_return = message;
+        } else {
+            neighbour_external_cost_configure(neigh, bias_256, coef_256,
+                                              expiry_msecs);
         }
-        free_neighbour_cost_request(request);
+
+        free(ifname);
     } else if(strcmp(token, "reopen-logfile") == 0) {
         c = skip_eol(c, gnc, closure);
         if(c < -1 || !action_return)

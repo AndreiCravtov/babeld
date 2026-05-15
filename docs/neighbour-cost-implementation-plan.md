@@ -30,11 +30,9 @@ temporary or durable structs live.
 - Treat `expiry-ms 0` as explicit no-expiry state.
 - Return `no <reason>` for semantic failures.
 - Keep metric behavior unchanged.
-- Parser produces a heap-allocated request object, returned through a
-  `struct neighbour_cost_request **`, matching the compound-object parser style
-  used for filters, interface config, and keys. This is local-control parsing,
-  so avoiding one short-lived allocation is not important.
-- Validation/application is a separate command handler.
+- Parser returns the parsed values through out-parameters, matching the simpler
+  fixed-schema parser helper style in `configuration.c`.
+- Validation and application are handled in the `neighbour-cost` command branch.
 - Validation returns local-control response strings directly in `configuration.c`,
   matching nearby command handling such as `flush interface`.
 - Interface and neighbour layers expose lookup helpers, not local-control response logic.
@@ -50,19 +48,17 @@ or cost-control API.
 Struct-placement note: existing parsed compound objects are generally durable
 objects declared outside `configuration.c`, such as `struct filter` in
 `configuration.h` and `struct interface_conf` / `struct key` in `interface.h`.
-The only structs currently defined in `configuration.c` besides
-`neighbour_cost_request` are parser input-state helpers. Therefore
-`neighbour_cost_request` should be treated as a temporary Stage 2 convenience,
-not a pattern to expand. If it remains purely local and short-lived, consider
-inlining it into the command parser/handler before shipping. If later stages
-need a durable cost-control object, move that concept to the owning module
-rather than growing private command DTOs in `configuration.c`.
+The only structs currently defined in `configuration.c` are parser input-state
+helpers. The temporary `neighbour_cost_request` parser struct used during Stage
+2 was removed before shipping Stage 4. The command now keeps parsed values as
+locals in `configuration.c`, which better matches nearby fixed-schema
+directives. If later stages need a durable cost-control object, move that
+concept to the owning module rather than growing private command DTOs in
+`configuration.c`.
 
 Correction: the real mutator name should be reserved for a later stage and
-should reflect the stable cost-control abstraction. Prefer a name such as
-`set_neighbour_cost_control(...)`,
-`set_neighbour_external_cost_params(...)`, or
-`set_neighbour_cost_adjustment(...)`.
+should reflect the stable external cost-control abstraction. Stage 4 uses
+`neighbour_external_cost_configure(...)`.
 
 ## Stage 3: Command And Monitor Schema Stabilization
 
@@ -81,16 +77,20 @@ Status: done.
 
 ## Stage 4: Per-Neighbour State
 
+Status: done.
+
 - Add `external_bias_256`, `external_coef_256`, and
-  `external_cost_expiry` to `struct neighbour`.
+  `external_cost_deadline` to `struct neighbour`.
 - Add helpers to read external cost-control state and remaining expiry time.
-- Add a real cost-control mutator, e.g. `set_neighbour_cost_control(...)`.
+- Add a real cost-control mutator,
+  `neighbour_external_cost_configure(...)`.
 - Make the mutator store and clear the fixed-point transform.
 - Store positive `expiry-ms` values as monotonic `now + expiry_ms` deadlines;
   store `0` as no expiry.
 - Preserve visible neutral state with positive expiry rather than collapsing it:
   `bias-256 0 coef-256 256 expiry-ms N` should report a neutral transform with
-  a remaining expiry until it expires back to neutral/no-expiry.
+  a remaining expiry until Stage 6 clears expired state back to
+  neutral/no-expiry.
 - Emit neighbour notifications when visible cost-control state changes, even before
   metric integration exists.
 

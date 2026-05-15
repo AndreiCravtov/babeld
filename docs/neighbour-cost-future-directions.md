@@ -91,5 +91,5 @@ wall-clock value, would be vulnerable to clock changes or clock skew between the
 controller and babeld, and would still need conversion into babeld's monotonic
 deadline model.
 
-Stage 4 should convert positive `expiry-ms` values into `now + expiry_ms`.
+Stage 4 converts positive `expiry-ms` values into `now + expiry_ms`.
 `expiry-ms 0` means no expiry and can be represented by a zero deadline.
