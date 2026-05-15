@@ -62,22 +62,25 @@ neighbour_cost_transform_test(void)
 
     struct test_case {
         unsigned txcost;
+        unsigned ifcost;
         int bias_256;
         unsigned coef_256;
         unsigned rtt;
         unsigned max_rtt_penalty;
+        int lq;
         unsigned expected;
     } tcs[] = {
-        {96, 0, 256, 0, 0, 96},
-        {96, 40960, 256, 0, 0, 256},
-        {96, 0, 128, 0, 0, 48},
-        {96, 300 * 256, 0, 0, 0, 300},
-        {96, -200 * 256, 256, 0, 0, 1},
-        {INFINITY - 1, 0, 256, 0, 0, INFINITY - 1},
-        {INFINITY - 1, 128, 256, 0, 0, INFINITY},
-        {96, 0, 256, 1000, 50, 146},
-        {96, 0, 128, 1000, 50, 98},
-        {INFINITY, -200 * 256, 0, 0, 0, INFINITY},
+        {96, 96, 0, 256, 0, 0, 0, 96},
+        {96, 96, 40960, 256, 0, 0, 0, 256},
+        {96, 96, 0, 128, 0, 0, 0, 48},
+        {96, 96, 300 * 256, 0, 0, 0, 0, 300},
+        {96, 96, -200 * 256, 256, 0, 0, 0, 1},
+        {INFINITY - 1, 96, 0, 256, 0, 0, 0, INFINITY - 1},
+        {INFINITY - 1, 96, 128, 256, 0, 0, 0, INFINITY},
+        {96, 96, 0, 256, 1000, 50, 0, 146},
+        {96, 96, 0, 128, 1000, 50, 0, 98},
+        {INFINITY, 96, -200 * 256, 0, 0, 0, 0, INFINITY},
+        {512, 512, 0, 256, 0, 0, 1, 1024},
     };
 
     for(i = 0; i < sizeof(tcs) / sizeof(tcs[0]); i++) {
@@ -85,10 +88,13 @@ neighbour_cost_transform_test(void)
 
         setup_neighbour(&neigh, &ifp);
         neigh.txcost = tcs[i].txcost;
+        ifp.cost = tcs[i].ifcost;
         neigh.rtt = tcs[i].rtt;
         ifp.rtt_min = 0;
         ifp.rtt_max = 1000;
         ifp.max_rtt_penalty = tcs[i].max_rtt_penalty;
+        if(tcs[i].lq)
+            ifp.flags |= IF_LQ;
         neighbour_external_cost_configure(&neigh, tcs[i].bias_256,
                                           tcs[i].coef_256);
 
