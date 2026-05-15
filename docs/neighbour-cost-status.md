@@ -2,7 +2,7 @@
 
 ## Current Stage
 
-Stage 4.5 is implemented in babeld only.
+Stage 4 is implemented in babeld only.
 
 Implemented:
 
@@ -30,8 +30,8 @@ Implemented:
   the neighbour.
 - Neighbour monitors receive `change neighbour` notifications when visible
   external cost-control state changes.
-- Expiry was removed in Stage 4.5. External cost control is set-and-forget and
-  must be changed or reset explicitly by another local-control command.
+- Expiry is out of scope. External cost control is set-and-forget and must be
+  changed or reset explicitly by another local-control command.
 
 Not implemented yet:
 
@@ -103,9 +103,9 @@ Liveness checks remain outside the transform: an unusable neighbour still has
 cost `INFINITY`. Metric integration should compute `raw_256` in a wide signed
 integer.
 
-## Stage 4.5 Transcript
+## Stage 4 Transcript
 
-Stage 4.5 accepts the full schema and stores the transform on the neighbour:
+Stage 4 accepts the full schema and stores the transform on the neighbour:
 
 ```text
 > neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256

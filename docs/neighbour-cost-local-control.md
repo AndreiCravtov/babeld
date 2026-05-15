@@ -146,9 +146,9 @@ neighbour maintenance path can also emit neighbour monitor updates when no
 external-cost state changed, so monitor clients should treat neighbour lines as
 state snapshots rather than precise edge-triggered events.
 
-## Stage 4.5 Transcript
+## Stage 4 Transcript
 
-Stage 4.5 validates the full command grammar and stores the transform:
+Stage 4 validates the full command grammar and stores the transform:
 
 ```text
 > neighbour-cost en2 fe80::1234 bias-256 40960 coef-256 256

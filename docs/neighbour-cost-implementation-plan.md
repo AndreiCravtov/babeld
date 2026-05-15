@@ -82,15 +82,10 @@ Status: done.
 - Make the mutator store the fixed-point transform.
 - Emit neighbour notifications when visible cost-control state changes, even
   before metric integration exists.
-
-## Stage 4.5: Remove Expiry
-
-Status: done.
-
-- Remove `expiry-ms` from the command grammar.
-- Remove per-neighbour deadline state and monitor expiry fields.
-- Remove external-cost expiry scheduling from neighbour maintenance.
-- Restore external cost control to a simple set-and-forget model: to change the
+- Keep expiry out of scope: there is no `expiry-ms` grammar, no per-neighbour
+  deadline state, no monitor expiry field, and no external-cost scheduling path
+  in neighbour maintenance.
+- Use a simple set-and-forget model: to change the
   transform, send another `neighbour-cost` command; to reset it, send the
   neutral `bias-256 0 coef-256 256` transform.
 - Keep the historical `check_neighbours()` / `babeld.c` scheduling contract
