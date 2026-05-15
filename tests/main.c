@@ -21,6 +21,8 @@ THE SOFTWARE.
 */
 
 #include "hmac_test.h"
+#include "configuration_test.h"
+#include "neighbour_test.h"
 #include "route_test.h"
 #include "test_utilities.h"
 #include "util_test.h"
@@ -29,6 +31,9 @@ int main(int argc, char **argv)
 {
     run_suite(util_test_suite, "util.c");
     run_suite(hmac_test_suite, "hmac.c");
+    run_suite(neighbour_test_suite, "neighbour.c");
     run_suite(route_test_suite, "route.c");
+    /* This finalises global configuration state, so keep it last. */
+    run_suite(configuration_test_suite, "configuration.c");
     return tests_failed;
 }

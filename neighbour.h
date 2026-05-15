@@ -54,6 +54,8 @@ struct neighbour {
     struct timeval challenge_deadline;
     struct timeval challenge_request_limitation;
     struct timeval challenge_reply_limitation;
+    int external_bias_256;
+    unsigned external_coef_256;
     struct interface *ifp;
     struct buffered buf;
 };
@@ -65,11 +67,17 @@ extern struct neighbour *neighs;
 
 struct neighbour *find_neighbour(const unsigned char *address,
                                  struct interface *ifp);
+struct neighbour *find_neighbour_nocreate(const unsigned char *address,
+                                          struct interface *ifp);
 int update_neighbour(struct neighbour *neigh, struct hello_history *hist,
                      int unicast, int hello, int hello_interval);
 unsigned check_neighbours(void);
 unsigned neighbour_txcost(struct neighbour *neigh);
 unsigned neighbour_rxcost(struct neighbour *neigh);
 unsigned neighbour_rttcost(struct neighbour *neigh);
+int neighbour_external_bias_256(struct neighbour *neigh);
+unsigned neighbour_external_coef_256(struct neighbour *neigh);
+int neighbour_external_cost_configure(struct neighbour *neigh, int bias_256,
+                                      unsigned coef_256);
 unsigned neighbour_cost(struct neighbour *neigh);
 int valid_rtt(struct neighbour *neigh);

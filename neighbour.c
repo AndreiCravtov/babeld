@@ -42,7 +42,7 @@ THE SOFTWARE.
 
 struct neighbour *neighs = NULL;
 
-static struct neighbour *
+struct neighbour *
 find_neighbour_nocreate(const unsigned char *address, struct interface *ifp)
 {
     struct neighbour *neigh;
@@ -112,6 +112,8 @@ find_neighbour(const unsigned char *address, struct interface *ifp)
     neigh->challenge_deadline = zero;
     neigh->challenge_request_limitation = zero;
     neigh->challenge_reply_limitation = zero;
+    neigh->external_bias_256 = 0;
+    neigh->external_coef_256 = 256; /* fixed-point 1.0 */
     neigh->ifp = ifp;
     neigh->buf.buf = buf;
     neigh->buf.size = ifp->buf.size;
@@ -334,6 +336,55 @@ neighbour_rttcost(struct neighbour *neigh)
     }
 }
 
+int
+neighbour_external_bias_256(struct neighbour *neigh)
+{
+    return neigh->external_bias_256;
+}
+
+unsigned
+neighbour_external_coef_256(struct neighbour *neigh)
+{
+    return neigh->external_coef_256;
+}
+
+int
+neighbour_external_cost_configure(struct neighbour *neigh, int bias_256,
+                                  unsigned coef_256)
+{
+    int changed;
+
+    changed =
+        neigh->external_bias_256 != bias_256 ||
+        neigh->external_coef_256 != coef_256;
+
+    if(!changed)
+        return 0;
+
+    neigh->external_bias_256 = bias_256;
+    neigh->external_coef_256 = coef_256;
+
+    update_neighbour_metric(neigh, 1);
+    return 1;
+}
+
+static unsigned
+apply_external_cost_transform(unsigned base_cost, unsigned rttcost,
+                              int bias_256, unsigned coef_256)
+{
+    long long raw;
+
+    raw = (long long)coef_256 * base_cost +
+          bias_256 + 256LL * rttcost;
+
+    if(raw <= 256)
+        return 1;
+    if(raw >= (long long)INFINITY * 256 - 128)
+        return INFINITY;
+
+    return (raw + 128) / 256;
+}
+
 unsigned
 neighbour_cost(struct neighbour *neigh)
 {
@@ -364,9 +415,9 @@ neighbour_cost(struct neighbour *neigh)
         cost = (a * b + 128) >> 8;
     }
 
-    cost += neighbour_rttcost(neigh);
-
-    return MIN(cost, INFINITY);
+    return apply_external_cost_transform(cost, neighbour_rttcost(neigh),
+                                         neighbour_external_bias_256(neigh),
+                                         neighbour_external_coef_256(neigh));
 }
 
 int

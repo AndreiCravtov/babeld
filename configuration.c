@@ -23,6 +23,7 @@ THE SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -37,6 +38,7 @@ THE SOFTWARE.
 #include "babeld.h"
 #include "util.h"
 #include "interface.h"
+#include "neighbour.h"
 #include "route.h"
 #include "kernel.h"
 #include "hmac.h"
@@ -46,6 +48,7 @@ static struct filter *input_filters = NULL;
 static struct filter *output_filters = NULL;
 static struct filter *redistribute_filters = NULL;
 static struct filter *install_filters = NULL;
+
 struct interface_conf *default_interface_conf = NULL;
 static struct interface_conf *interface_confs = NULL;
 
@@ -353,6 +356,90 @@ gethex(int c, unsigned char **value_r, int *len_r, gnc_t gnc, void *closure)
     *value_r = value;
     *len_r = len / 2;
     return c;
+}
+
+static int
+getint_range(int c, int *int_r, int min, int max,
+             gnc_t gnc, void *closure)
+{
+    char *t, *end;
+    long value;
+    c = getword(c, &t, gnc, closure);
+    if(c < -1)
+        return c;
+    errno = 0;
+    value = strtol(t, &end, 0);
+    if(errno == ERANGE || *end != '\0' || value < min || value > max) {
+        free(t);
+        return -2;
+    }
+    free(t);
+    *int_r = value;
+    return c;
+}
+
+static int
+parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
+                             char **ifname_return,
+                             unsigned char *address_return,
+                             int *bias_256_return,
+                             unsigned *coef_256_return)
+{
+    const int max_bias_256 = (INFINITY - 1) * 256;
+    const int max_coef_256 = 65535;
+
+    char *ifname = NULL, *token = NULL;
+    unsigned char *address = NULL;
+    unsigned char address_buf[16];
+    int af, bias_256 = 0, coef_256 = 0;
+
+    c = getword(c, &ifname, gnc, closure);
+    if(c < -1)
+        goto fail;
+
+    c = getip(c, &address, &af, gnc, closure);
+    if(c < -1 || af != AF_INET6)
+        goto fail;
+    memcpy(address_buf, address, 16);
+    free(address);
+    address = NULL;
+
+    c = getword(c, &token, gnc, closure);
+    if(c < -1 || strcmp(token, "bias-256") != 0)
+        goto fail;
+    free(token);
+    token = NULL;
+
+    c = getint_range(c, &bias_256, -max_bias_256, max_bias_256,
+                     gnc, closure);
+    if(c < -1)
+        goto fail;
+
+    c = getword(c, &token, gnc, closure);
+    if(c < -1 || strcmp(token, "coef-256") != 0)
+        goto fail;
+    free(token);
+    token = NULL;
+
+    c = getint_range(c, &coef_256, 0, max_coef_256, gnc, closure);
+    if(c < -1)
+        goto fail;
+
+    c = skip_eol(c, gnc, closure);
+    if(c < -1)
+        goto fail;
+
+    *ifname_return = ifname;
+    memcpy(address_return, address_buf, 16);
+    *bias_256_return = bias_256;
+    *coef_256_return = coef_256;
+    return c;
+
+ fail:
+    free(token);
+    free(address);
+    free(ifname);
+    return -2;
 }
 
 static void
@@ -1247,6 +1334,42 @@ parse_config_line(int c, gnc_t gnc, void *closure,
             free(token2);
             goto fail;
         }
+    } else if(strcmp(token, "neighbour-cost") == 0) {
+        char *ifname = NULL;
+        unsigned char address[16];
+        int bias_256;
+        unsigned coef_256;
+        struct interface *ifp;
+        struct neighbour *neigh = NULL;
+        const char *message = NULL;
+        if(!config_finalised)
+            goto fail;
+        c = parse_neighbour_cost_command(c, gnc, closure, &ifname, address,
+                                         &bias_256, &coef_256);
+        if(c < -1)
+            goto fail;
+
+        ifp = find_interface(ifname);
+        if(ifp == NULL) {
+            message = "No such interface";
+        } else if(!linklocal(address)) {
+            message = "Address is not link-local";
+        } else {
+            neigh = find_neighbour_nocreate(address, ifp);
+            if(neigh == NULL)
+                message = "No such neighbour";
+        }
+
+        if(message != NULL) {
+            if(action_return)
+                *action_return = CONFIG_ACTION_NO;
+            if(message_return)
+                *message_return = message;
+        } else {
+            neighbour_external_cost_configure(neigh, bias_256, coef_256);
+        }
+
+        free(ifname);
     } else if(strcmp(token, "reopen-logfile") == 0) {
         c = skip_eol(c, gnc, closure);
         if(c < -1 || !action_return)

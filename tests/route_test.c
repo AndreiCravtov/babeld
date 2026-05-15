@@ -816,6 +816,37 @@ void change_route_metric_test(void)
     }
 }
 
+void neighbour_external_cost_configure_updates_route_test(void)
+{
+    struct babel_route *route = routes[0];
+    struct neighbour *neigh = route->neigh;
+
+    now.tv_sec = 0;
+    now.tv_usec = 0;
+
+    neigh->ifp->flags = IF_UP;
+    neigh->ifp->cost = 96;
+    neigh->txcost = 96;
+    neigh->hello.reach = 0xffff;
+    neigh->hello.time = now;
+    neigh->uhello.time = now;
+    neigh->external_bias_256 = 0;
+    neigh->external_coef_256 = 256;
+    route->time = now.tv_sec;
+
+    update_route_metric(route);
+    if(!babel_check(route->cost == 96)) {
+        fprintf(stderr, "route->cost = %u, expected 96 before configure.\n",
+                route->cost);
+    }
+
+    neighbour_external_cost_configure(neigh, 40960, 256);
+    if(!babel_check(route->cost == 256)) {
+        fprintf(stderr, "route->cost = %u, expected 256 after configure.\n",
+                route->cost);
+    }
+}
+
 void route_setup(void) {
     int i;
     struct interface *ifp = add_interface("test_if", NULL);
@@ -899,4 +930,6 @@ void route_test_suite(void)
     run_test(update_feasible_test, "update_feasible_test");
     run_test(change_smoothing_half_life_test, "change_smoothing_half_life_test");
     run_route_test(change_route_metric_test, "change_route_metric_test");
+    run_route_test(neighbour_external_cost_configure_updates_route_test,
+                   "neighbour_external_cost_configure_updates_route_test");
 }

@@ -624,6 +624,8 @@ any configuration file directive, including
 .IP \(bu
 .BR "flush interface" ;
 .IP \(bu
+.BR neighbour-cost ;
+.IP \(bu
 .BR dump ;
 .IP \(bu
 .B monitor
@@ -631,6 +633,78 @@ and
 .BR unmonitor ;
 .IP \(bu
 .BR quit .
+.PP
+The
+.B neighbour-cost
+request is only accepted on a read-write local configuration interface.  Its
+syntax is
+.IP
+.BI "neighbour-cost " ifname " " link-local-neighbour " bias-256 " bias " coef-256 " coef
+.PP
+where
+.I ifname
+is the interface name, and
+.I link-local-neighbour
+is the neighbour's IPv6 link-local address.  The address should not include a
+scope id; the interface name supplies the scope.
+.PP
+.I bias
+is a signed fixed-point additive cost in units of 1/256, so
+.B bias-256 256
+adds one cost unit and
+.B bias-256 -256
+subtracts one cost unit.  The accepted range is
+.BR "-(65534 * 256)" " to " "+(65534 * 256)" .
+.I coef
+is an unsigned fixed-point multiplier in units of 1/256, so
+.B coef-256 256
+preserves the native link cost,
+.B coef-256 128
+halves it, and
+.B coef-256 0
+ignores the native link cost.  The RTT penalty is still added outside this
+multiplier.  The accepted range is
+.BR 0 " to " 65535 .
+Integer tokens use base-0 syntax; overflowed or out-of-range tokens are
+syntax errors.
+.PP
+The resulting link cost is computed as
+.IP
+raw-256 = coef * native-base-cost + bias + 256 * rtt-penalty
+.PP
+then divided by 256, rounded to the nearest integer, and clamped to Babel's
+metric range.  The native base cost is the wired or ETX cost before the RTT
+penalty is added.  Link liveness is checked before this transform, so an
+unusable neighbour still has infinite cost.
+.PP
+The command is set-and-forget: it has no expiry timer.  To change the external
+cost control state, send another
+.B neighbour-cost
+request; to reset a neighbour to neutral behaviour, send
+.IP
+.BI "neighbour-cost " ifname " " link-local-neighbour " bias-256 0 coef-256 256"
+.PP
+Malformed syntax returns
+.BR bad .
+Semantic failures return
+.BR no ,
+currently with one of
+.BR "No such interface" ,
+.BR "Address is not link-local" ,
+or
+.BR "No such neighbour" .
+Successful requests return
+.BR ok .
+.PP
+Neighbour lines reported by
+.B dump
+and
+.B monitor
+include
+.B external-bias-256
+and
+.B external-coef-256
+fields.
 .SH EXAMPLES
 You can participate in a Babel network by simply running
 .IP
