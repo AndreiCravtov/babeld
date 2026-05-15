@@ -30,6 +30,9 @@ temporary or durable structs live.
 - Keep metric behavior unchanged.
 - Parser returns the parsed values through out-parameters, matching the simpler
   fixed-schema parser helper style in `configuration.c`.
+- Parse `bias-256` and `coef-256` with explicit overflow/range checks before
+  narrowing the token value to `int`; do not rely on the older generic
+  `getint()` helper for this command.
 - Validation and application are handled in the `neighbour-cost` command branch.
 - Validation returns local-control response strings directly in
   `configuration.c`, matching nearby command handling such as `flush interface`.
@@ -123,6 +126,8 @@ Status: done.
 - Add local socket transcript examples.
 - Verify accepted commands, rejected commands, monitor events, route metric
   changes, and explicit neutral reset.
+- Add automated local-control parser coverage through `parse_config_from_string`
+  for the command path and its failure modes.
 - Record the two-node workflow in `docs/neighbour-cost-lab-workflow.md`.
 
 ## Future Direction: Decimal Transform

@@ -18,6 +18,8 @@ Implemented:
 - Parsing returns values through out-parameters before validation/application,
   avoiding a one-off request struct and matching the local fixed-schema parser
   style.
+- `bias-256` and `coef-256` parsing uses base-0 integer syntax with explicit
+  overflow and range checks before narrowing to `int`.
 - Semantic validation returns local-control response strings directly in
   `configuration.c`, matching nearby command handling such as `flush interface`.
 - `interface.c` exposes interface lookup, and `neighbour.c` exposes
@@ -44,10 +46,18 @@ Implemented:
 
 Verification:
 
+- `nix develop -c make test` passes from a clean tree.
 - `nix develop -c make` passes with `-Wall`.
-- `nix develop -c make test` passes after cleaning stale non-test objects.
+- `nix develop -c make babeld.html` passes.
+- `nix develop -c git diff --check` passes.
 - Remote macOS build passes with plain `nix develop -c make`; the Makefile
   omits `-lrt` on Darwin.
+- `nix develop -c mandoc -Tlint babeld.man` still reports only known
+  pre-existing manpage diagnostics.
+- Automated tests exercise the `parse_config_from_string()` local-control path
+  for valid updates, malformed syntax, semantic `no ...` responses,
+  read-write/finalisation gating, comments, neutral reset, and oversized
+  or out-of-range integer rejection.
 - Stage 7 local-control transcript verifies `ok`, `bad`, all semantic
   `no ...` responses, dump fields, monitor events, route metric changes, and
   neutral reset.
@@ -66,8 +76,8 @@ Current parser validation:
   `-(65534 * 256)..+(65534 * 256)`.
 - `coef-256` is mandatory and must be followed by a non-negative integer in
   `0..65535`.
-- `<int>` and `<nat>` inherit the existing `getint()` base-0 syntax; they are
-  not documented as strict decimal-only values.
+- `<int>` and `<nat>` use base-0 integer syntax with explicit overflow and
+  range checks before narrowing.
 
 Current semantic validation:
 

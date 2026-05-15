@@ -81,8 +81,10 @@ The accepted range is:
 
 That represents coefficients from `0.0` to roughly `255.996`.
 
-`<int>` and `<nat>` use babeld's existing `getint()` parser; this is not a
-strict decimal-only grammar.
+`<int>` and `<nat>` use base-0 integer syntax, so decimal, octal-style, and
+hexadecimal tokens accepted by `strtol(..., base 0)` are valid.  The
+`neighbour-cost` parser checks overflow and the documented range before
+narrowing the value to an `int`; oversized tokens are rejected as `bad`.
 
 The neutral reset command is:
 

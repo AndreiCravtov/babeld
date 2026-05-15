@@ -23,6 +23,7 @@ THE SOFTWARE.
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <errno.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -358,6 +359,26 @@ gethex(int c, unsigned char **value_r, int *len_r, gnc_t gnc, void *closure)
 }
 
 static int
+getint_range(int c, int *int_r, int min, int max,
+             gnc_t gnc, void *closure)
+{
+    char *t, *end;
+    long value;
+    c = getword(c, &t, gnc, closure);
+    if(c < -1)
+        return c;
+    errno = 0;
+    value = strtol(t, &end, 0);
+    if(errno == ERANGE || *end != '\0' || value < min || value > max) {
+        free(t);
+        return -2;
+    }
+    free(t);
+    *int_r = value;
+    return c;
+}
+
+static int
 parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
                              char **ifname_return,
                              unsigned char *address_return,
@@ -389,10 +410,9 @@ parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
     free(token);
     token = NULL;
 
-    c = getint(c, &bias_256, gnc, closure);
-    if(c < -1 ||
-       bias_256 < -max_bias_256 ||
-       bias_256 > max_bias_256)
+    c = getint_range(c, &bias_256, -max_bias_256, max_bias_256,
+                     gnc, closure);
+    if(c < -1)
         goto fail;
 
     c = getword(c, &token, gnc, closure);
@@ -401,10 +421,8 @@ parse_neighbour_cost_command(int c, gnc_t gnc, void *closure,
     free(token);
     token = NULL;
 
-    c = getint(c, &coef_256, gnc, closure);
-    if(c < -1 ||
-       coef_256 < 0 ||
-       coef_256 > max_coef_256)
+    c = getint_range(c, &coef_256, 0, max_coef_256, gnc, closure);
+    if(c < -1)
         goto fail;
 
     c = skip_eol(c, gnc, closure);

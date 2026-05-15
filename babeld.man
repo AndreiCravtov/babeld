@@ -665,6 +665,8 @@ halves it, and
 ignores the native link cost.  The RTT penalty is still added outside this
 multiplier.  The accepted range is
 .BR 0 " to " 65535 .
+Integer tokens use base-0 syntax; overflowed or out-of-range tokens are
+syntax errors.
 .PP
 The resulting link cost is computed as
 .IP
