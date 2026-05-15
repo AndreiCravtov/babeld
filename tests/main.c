@@ -33,6 +33,7 @@ int main(int argc, char **argv)
     run_suite(hmac_test_suite, "hmac.c");
     run_suite(neighbour_test_suite, "neighbour.c");
     run_suite(route_test_suite, "route.c");
+    /* This finalises global configuration state, so keep it last. */
     run_suite(configuration_test_suite, "configuration.c");
     return tests_failed;
 }

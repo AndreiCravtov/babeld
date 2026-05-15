@@ -138,6 +138,12 @@ neighbour_cost_config_command_test(void)
     }
 
     if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
+                                  "bias-256 0 coef-256 -1",
+                                  &message) == -1)) {
+        fprintf(stderr, "negative coef-256 parsed.\n");
+    }
+
+    if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
                                   "bias-256 0x100000000 coef-256 256",
                                   &message) == -1)) {
         fprintf(stderr, "oversized bias-256 parsed.\n");
@@ -147,6 +153,48 @@ neighbour_cost_config_command_test(void)
                                   "bias-256 16776705 coef-256 256",
                                   &message) == -1)) {
         fprintf(stderr, "out-of-range bias-256 parsed.\n");
+    }
+
+    if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
+                                  "bias-256 -16776705 coef-256 256",
+                                  &message) == -1)) {
+        fprintf(stderr, "below-range bias-256 parsed.\n");
+    }
+
+    if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
+                                  "bias-256 16776704 coef-256 65535",
+                                  &message) == CONFIG_ACTION_DONE)) {
+        fprintf(stderr, "maximum boundary neighbour-cost command failed.\n");
+    }
+    if(!babel_check(neighbour_external_bias_256(neigh) == 16776704 &&
+                    neighbour_external_coef_256(neigh) == 65535)) {
+        fprintf(stderr, "maximum boundary command did not update state.\n");
+    }
+
+    if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
+                                  "bias-256 -16776704 coef-256 0",
+                                  &message) == CONFIG_ACTION_DONE)) {
+        fprintf(stderr, "minimum boundary neighbour-cost command failed.\n");
+    }
+    if(!babel_check(neighbour_external_bias_256(neigh) == -16776704 &&
+                    neighbour_external_coef_256(neigh) == 0)) {
+        fprintf(stderr, "minimum boundary command did not update state.\n");
+    }
+
+    if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
+                                  "bias-256 0x100 coef-256 010",
+                                  &message) == CONFIG_ACTION_DONE)) {
+        fprintf(stderr, "base-0 neighbour-cost command failed.\n");
+    }
+    if(!babel_check(neighbour_external_bias_256(neigh) == 256 &&
+                    neighbour_external_coef_256(neigh) == 8)) {
+        fprintf(stderr, "base-0 command did not update state.\n");
+    }
+
+    if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
+                                  "bias-256 0 coef-256 09",
+                                  &message) == -1)) {
+        fprintf(stderr, "invalid base-0 coef-256 parsed.\n");
     }
 
     if(!babel_check(parse_command("neighbour-cost config_if fe80::42 "
